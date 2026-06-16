@@ -2,6 +2,12 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## Unreleased
+
+- Refined the main GUI typography: the sequence input label is no longer bold, while functional module titles use bold label-frame headings.
+- Updated the mirror-image chirality module title to `Mirror-image L-form chirality (L-DNA)`.
+- Replaced the one-line current helical-parameter display with a compact table showing parameter names, values, and default/custom source status.
+
 ## V13.5
 
 - Renamed the bundled helical-axis angle tool from `bnp_na_lib/angle_helical_axisV2.py` to `bnp_na_lib/angle_helical_axisV2_1.py` so the filename indicates the incorporated script version.

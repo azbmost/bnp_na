@@ -159,6 +159,8 @@ class App(tk.Tk):
         self._set_optional_window_icon()
         self.geometry("1240x1080")
         self.minsize(1080, 920)
+        self._style = ttk.Style(self)
+        self._style.configure("Bold.TLabelframe.Label", font=("Helvetica", 11, "bold"))
 
         self.param_values_by_type: Dict[str, Dict[str, str]] = {
             na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
@@ -186,7 +188,7 @@ class App(tk.Tk):
             row=1, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 4)
         )
 
-        ttk.Label(self, text="Sequence (5'->3'):", font=("Helvetica", 11, "bold")).grid(
+        ttk.Label(self, text="Sequence (5'->3'):").grid(
             row=2, column=0, sticky="e", **pad
         )
         self.seq_var = tk.StringVar(value="")
@@ -222,7 +224,7 @@ class App(tk.Tk):
         self.output_dir_entry.grid(row=5, column=1, sticky="we", **pad)
         ttk.Button(self, text="Browse", command=self.browse_output_dir).grid(row=5, column=2, sticky="w", **pad)
 
-        type_frame = ttk.LabelFrame(self, text="Nucleic acid type")
+        type_frame = ttk.LabelFrame(self, text="Nucleic acid type", style="Bold.TLabelframe")
         type_frame.grid(row=6, column=0, columnspan=4, sticky="we", padx=12, pady=8)
         self.na_type_var = tk.StringVar(value="B-DNA")
         for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
@@ -234,23 +236,49 @@ class App(tk.Tk):
                 command=self.on_type_changed,
             ).grid(row=0, column=idx, padx=8, pady=4, sticky="w")
 
-        self.custom_btn = ttk.Button(
+        self.param_frame = ttk.LabelFrame(
             self,
+            text="Current DSSR helical parameters",
+            style="Bold.TLabelframe",
+        )
+        self.param_frame.grid(row=7, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.param_frame.grid_columnconfigure(1, weight=1)
+
+        self.custom_btn = ttk.Button(
+            self.param_frame,
             text="Customize DSSR parameters",
             command=self.open_param_dialog,
         )
-        self.custom_btn.grid(row=7, column=0, sticky="e", **pad)
-        self.param_values_var = tk.StringVar(value="")
-        self.param_values_lbl = ttk.Label(
-            self,
-            textvariable=self.param_values_var,
+        self.custom_btn.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 6))
+        self.param_status_var = tk.StringVar(value="")
+        ttk.Label(
+            self.param_frame,
+            textvariable=self.param_status_var,
             foreground="#555",
             justify="left",
-            wraplength=860,
-        )
-        self.param_values_lbl.grid(row=7, column=1, columnspan=3, sticky="w", **pad)
+            wraplength=820,
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=(8, 6))
 
-        self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization")
+        self.param_table = ttk.Treeview(
+            self.param_frame,
+            columns=("param_a", "value_a", "source_a", "param_b", "value_b", "source_b"),
+            show="headings",
+            height=6,
+            selectmode="none",
+        )
+        for column, heading, width, anchor in (
+            ("param_a", "Parameter", 110, "w"),
+            ("value_a", "Value", 90, "e"),
+            ("source_a", "Source", 90, "center"),
+            ("param_b", "Parameter", 110, "w"),
+            ("value_b", "Value", 90, "e"),
+            ("source_b", "Source", 90, "center"),
+        ):
+            self.param_table.heading(column, text=heading)
+            self.param_table.column(column, width=width, anchor=anchor, stretch=True)
+        self.param_table.grid(row=1, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 8))
+
+        self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization", style="Bold.TLabelframe")
         self.min_frame.grid(row=8, column=0, columnspan=4, sticky="we", padx=12, pady=6)
         self.min_frame.grid_columnconfigure(1, weight=1)
         self.minimize_var = tk.BooleanVar(value=DEFAULT_MINIMIZE_BY_TYPE["B-DNA"])
@@ -282,7 +310,11 @@ class App(tk.Tk):
             variable=self.deleteH_var,
         ).pack(side="left", padx=8)
 
-        self.chirality_frame = ttk.LabelFrame(self, text="Mirror-image L-form chirality")
+        self.chirality_frame = ttk.LabelFrame(
+            self,
+            text="Mirror-image L-form chirality (L-DNA)",
+            style="Bold.TLabelframe",
+        )
         self.chirality_frame.grid(row=10, column=0, columnspan=4, sticky="we", padx=12, pady=6)
         self.chirality_frame.grid_columnconfigure(4, weight=1)
         self.invrot_enabled_var = tk.BooleanVar(value=False)
@@ -313,7 +345,7 @@ class App(tk.Tk):
         )
         self._refresh_invrot_state()
 
-        place = ttk.LabelFrame(self, text="Placement / Orientation")
+        place = ttk.LabelFrame(self, text="Placement / Orientation", style="Bold.TLabelframe")
         place.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=8)
         for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
             place.grid_columnconfigure(col, minsize=minsize)
@@ -360,7 +392,7 @@ class App(tk.Tk):
             row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
         )
 
-        tools = ttk.LabelFrame(self, text="Analysis tools")
+        tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
         tools.grid(row=13, column=0, columnspan=4, sticky="we", padx=12, pady=6)
         tools.grid_columnconfigure(1, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
@@ -382,7 +414,7 @@ class App(tk.Tk):
             wraplength=850,
         ).grid(row=1, column=1, sticky="w", padx=8, pady=6)
 
-        log_frame = ttk.LabelFrame(self, text="Log output")
+        log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
@@ -672,12 +704,16 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         defaults = self._current_defaults()
         store = self._current_param_store()
         if defaults is None or store is None:
-            self.param_values_var.set("Z-DNA uses DSSR fiber; the 12-parameter table is not used.")
+            self.param_status_var.set("Z-DNA uses DSSR fiber; the 12-parameter table is not used.")
+            self.param_table.delete(*self.param_table.get_children())
+            self.param_table.grid_remove()
             return
 
-        parts = []
+        self.param_table.grid()
+        self.param_table.delete(*self.param_table.get_children())
         changed = []
-        for key, default in zip(PARAM_KEYS, defaults):
+
+        def shown_value_and_source(key: str, default: float) -> Tuple[str, str]:
             raw = store.get(key, "").strip()
             value = raw if raw else f"{default:.4f}"
             try:
@@ -685,15 +721,42 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 shown = f"{numeric:.4f}"
                 if raw and abs(numeric - float(default)) > 1e-10:
                     changed.append(key)
+                    source = "custom"
+                else:
+                    source = "default"
             except Exception:
                 shown = value
-            parts.append(f"{key}={shown}")
-        prefix = f"{na_type} DSSR table values: "
+                source = "custom" if raw else "default"
+                if raw:
+                    changed.append(key)
+            return shown, source
+
+        for left, left_default, right, right_default in zip(
+            PARAM_KEYS[:6],
+            defaults[:6],
+            PARAM_KEYS[6:],
+            defaults[6:],
+        ):
+            left_value, left_source = shown_value_and_source(left, left_default)
+            right_value, right_source = shown_value_and_source(right, right_default)
+            self.param_table.insert(
+                "",
+                "end",
+                values=(
+                    PARAM_LABELS.get(left, left),
+                    left_value,
+                    left_source,
+                    PARAM_LABELS.get(right, right),
+                    right_value,
+                    right_source,
+                ),
+            )
+
         if changed:
-            prefix += "customized fields: " + ", ".join(changed) + ". "
+            status = f"{na_type} table values; customized fields: {', '.join(changed)}."
         else:
-            prefix += "default values. "
-        self.param_values_var.set(prefix + "    ".join(parts))
+            status = f"{na_type} table values; all fields use defaults."
+        self.param_status_var.set(status)
 
     def _update_sequence_length(self) -> None:
         na_type = self.na_type_var.get().strip()
