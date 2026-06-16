@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file.
 
-The current app version is `V13.1`.
+The current app version is `V13.2`.
 
 ## What It Does
 
@@ -12,6 +12,7 @@ The current app version is `V13.1`.
 - Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
+- Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
 - Writes final PDB files to the selected output folder and intermediate files to `<output folder>/tmp_file/`.
 
@@ -70,7 +71,7 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 3. Choose `B-DNA`, `A-DNA`, `A-RNA`, or `Z-DNA`.
 4. Enter a sequence for B-DNA, A-DNA, or A-RNA, or enter an even base-pair length for Z-DNA.
 5. Choose an output folder.
-6. Adjust DSSR parameters, minimization, hydrogens, and placement values if needed.
+6. Adjust DSSR parameters, minimization, hydrogens, mirror-image L-form conversion, and placement values if needed.
 7. Click `Generate`.
 8. Read the embedded log for the exact commands, intermediate files, and final placed PDB path.
 
@@ -240,6 +241,116 @@ python3 bnp_na_lib/pdb_name_standard.py input.pdb
 python3 bnp_na_lib/pdb_name_standard.py input.pdb --deleteH
 ```
 
+## Mirror-Image L-Form Modeling
+
+The `Mirror-image L-form chirality` section can be used to generate mirror-image nucleic-acid models. This step runs after DSSR align-to-Z and before the final placement/orientation transform.
+
+The order is:
+
+```text
+build -> normalize names -> optional minimization -> align to +Z -> optional inv/rot mirror -> orient/place
+```
+
+This position in the pipeline is important. Once the helix has been aligned to +Z, the coordinate axes are predictable. The mirror operation can change chirality first, and then the normal `roll`, `phi`, `theta`, `x`, `y`, and `z` controls can place the mirrored model.
+
+Enable `Apply inv/rot after align-to-Z` to turn this on. When enabled, the operation dropdown becomes active.
+
+### Why Inversion Plus Rotation Gives A Reflection
+
+Changing chirality requires an improper transform, meaning a transform with determinant `-1`. A normal rotation has determinant `+1`, so it can rotate a model but cannot make its mirror image.
+
+Point inversion maps:
+
+```text
+(x, y, z) -> (-x, -y, -z)
+```
+
+Point inversion has determinant `-1`, so it changes handedness. A 180-degree rotation has determinant `+1`. Combining point inversion with one or more 180-degree rotations still gives determinant `-1`, so the final operation is still a mirror/chirality-changing operation.
+
+For example:
+
+```text
+inversion + 180-degree rotation around x
+(-x, -y, -z) -> (-x, y, z)
+```
+
+That is equivalent to reflection across the `yz` plane.
+
+### i Mode Operations
+
+`i` mode means point inversion plus optional 180-degree rotations:
+
+```text
+i      inversion only
+ix     inversion + 180-degree rotation around x
+iy     inversion + 180-degree rotation around y
+iz     inversion + 180-degree rotation around z
+ixy    inversion + rotations around x and y
+ixz    inversion + rotations around x and z
+iyz    inversion + rotations around y and z
+ixyz   inversion + rotations around x, y, and z
+```
+
+The original script also accepts instructions such as `x`, `xy`, or `xyz` as shorthand for `ix`, `ixy`, or `ixyz`. The GUI lists the explicit `i` forms.
+
+### o Mode Operations
+
+`o` mode names the reflection plane directly:
+
+```text
+oxy    reflection across the xy plane
+oyz    reflection across the yz plane
+oxz    reflection across the xz plane
+```
+
+Internally, these are implemented as inversion plus a 180-degree rotation around the perpendicular axis:
+
+```text
+oxy = inversion + Rz(180)
+oyz = inversion + Rx(180)
+oxz = inversion + Ry(180)
+```
+
+The GUI default is `oyz`. After align-to-Z, `oyz` and `oxz` keep the `z` coordinate sign, so the aligned +Z direction is preserved before placement. `oxy` and plain `i` change the `z` sign, so they reverse the aligned helix direction before placement.
+
+When this option is enabled, the final placed PDB name includes the L-form operation label:
+
+```text
+<helix-name>_L_o_yz_oriented_placed.pdb
+```
+
+The intermediate mirrored PDB is written in:
+
+```text
+<output folder>/tmp_file/
+```
+
+The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
+
+```text
+REMARK BNP_NA bnp_na V13.2 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
+REMARK BNP_NA_L_FORM YES
+REMARK BNP_NA_L_FORM_KIND L-DNA
+REMARK BNP_NA_L_RESIDUES_BEGIN COUNT <n>
+REMARK BNP_NA_L_RESIDUE KIND L-DNA CHAIN <chain> RESSEQ <num> ICODE <icode> RESNAME <name>
+REMARK BNP_NA_L_RESIDUES_END
+```
+
+For A-RNA mirror output, the residue kind is written as `L-RNA`. For ordinary non-mirrored output, the final PDB includes:
+
+```text
+REMARK BNP_NA_L_FORM NO
+REMARK BNP_NA_L_RESIDUES NONE
+```
+
+You can also run the helper directly:
+
+```bash
+python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb oyz
+python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
+```
+
 ## Delete Hydrogens
 
 `Delete hydrogens from generated PDB` removes hydrogen atoms during the PDB naming-normalization step. This is useful when downstream refinement, minimization, or model placement should start from heavy atoms only.
@@ -292,6 +403,8 @@ The log includes:
 - Whether hydrogens were deleted.
 - Exact DSSR and Phenix command lines.
 - Paths to generated tables, rebuilt PDB files, normalized PDB files, minimized PDB files, aligned PDB files, and final placed PDB files.
+- The L-form inv/rot mirror operation and mirrored intermediate PDB path when enabled.
+- The final PDB `REMARK` annotations, including provenance and L-form residue records.
 - Parameter overrides applied from the GUI.
 - The final orientation/placement transform.
 
@@ -382,6 +495,7 @@ The GUI checks for `assets/bnp_na_icon.png` at startup and continues normally if
 ```text
 bnp_na.py                  Main GUI/controller
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
+bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
 bnp_na_lib/min_P_C5.params Default Phenix minimization params file
 assets/                    Optional app/taskbar icon assets

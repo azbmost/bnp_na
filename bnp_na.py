@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.1: Building and placing nucleic acid helices.
+"""bnp_na V13.2: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.1"
+__version__ = "V13.2"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -32,6 +32,7 @@ from build_common import (  # noqa: E402
     sequence_alphabet,
 )
 from build_zdna import build_zdna  # noqa: E402
+from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
 from na_placer import PlacerError, place_after_Z  # noqa: E402
 
 
@@ -55,6 +56,7 @@ DEFAULT_OUTPUT_DIR = APP_DIR / "output"
 DEFAULT_ICON_FILE = APP_DIR / "assets" / "bnp_na_icon.png"
 NA_TYPES_WITH_TABLE = ("B-DNA", "A-DNA", "A-RNA")
 DEFAULT_MINIMIZE_BY_TYPE = {"B-DNA": True, "A-DNA": False, "A-RNA": False}
+INV_ROT_OPERATIONS = ("oyz", "oxz", "oxy", "i", "ix", "iy", "iz", "ixy", "ixz", "iyz", "ixyz")
 
 
 def _path_text(path: Path) -> str:
@@ -76,9 +78,76 @@ def _ensure_output_dirs(output_dir_text: str) -> Tuple[Path, Path]:
     return output_dir, tmp_dir
 
 
-def _final_placed_path(output_dir: Path, base_name: str) -> Path:
+def _final_placed_path(output_dir: Path, base_name: str, suffix: str = "") -> Path:
     safe = sanitize_basename(base_name or "bnp_na_helix") or "bnp_na_helix"
-    return output_dir / f"{safe}_oriented_placed.pdb"
+    safe_suffix = sanitize_basename(suffix)
+    suffix_part = f"_{safe_suffix}" if safe_suffix else ""
+    return output_dir / f"{safe}{suffix_part}_oriented_placed.pdb"
+
+
+def _pdb_coord_residues(pdb_path: Path) -> list[Tuple[str, str, str, str]]:
+    residues = []
+    seen = set()
+    with open(pdb_path, "r", encoding="utf-8", errors="ignore") as fin:
+        for line in fin:
+            if not line.startswith(("ATOM", "HETATM")):
+                continue
+            resname = line[17:20].strip() or "."
+            chain = line[21].strip() or "."
+            resseq = line[22:26].strip() or "."
+            icode = line[26].strip() or "."
+            key = (chain, resseq, icode, resname)
+            if key not in seen:
+                seen.add(key)
+                residues.append(key)
+    return residues
+
+
+def _prepend_final_pdb_remarks(
+    pdb_path: Path,
+    na_type: str,
+    l_form_enabled: bool,
+    invrot_result: Optional[Dict[str, object]],
+) -> str:
+    residues = _pdb_coord_residues(pdb_path)
+    l_kind = "L-RNA" if na_type == "A-RNA" else "L-DNA"
+    lines = [
+        f"REMARK BNP_NA bnp_na {__version__} from DiLiuLab's AZBMOST was used to create this file.",
+        "REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na",
+        f"REMARK BNP_NA_NA_TYPE {na_type}",
+    ]
+
+    if l_form_enabled:
+        label = str(invrot_result.get("label", "")) if invrot_result else ""
+        mode = str(invrot_result.get("mode", "")) if invrot_result else ""
+        axes = str(invrot_result.get("rotation_axes", "")) if invrot_result else ""
+        signs = invrot_result.get("coordinate_signs") if invrot_result else None
+        signs_text = ",".join(str(value) for value in signs) if signs else ""
+        lines += [
+            "REMARK BNP_NA_L_FORM YES",
+            f"REMARK BNP_NA_L_FORM_KIND {l_kind}",
+            f"REMARK BNP_NA_INV_ROT_LABEL {label}",
+            f"REMARK BNP_NA_INV_ROT_MODE {mode}",
+            f"REMARK BNP_NA_INV_ROT_AXES {axes if axes else 'none'}",
+            f"REMARK BNP_NA_INV_ROT_SIGNS {signs_text}",
+            f"REMARK BNP_NA_L_RESIDUES_BEGIN COUNT {len(residues)}",
+        ]
+        for chain, resseq, icode, resname in residues:
+            lines.append(
+                f"REMARK BNP_NA_L_RESIDUE KIND {l_kind} CHAIN {chain} "
+                f"RESSEQ {resseq} ICODE {icode} RESNAME {resname}"
+            )
+        lines.append("REMARK BNP_NA_L_RESIDUES_END")
+    else:
+        lines += [
+            "REMARK BNP_NA_L_FORM NO",
+            "REMARK BNP_NA_L_RESIDUES NONE",
+        ]
+
+    original = pdb_path.read_text(encoding="utf-8", errors="ignore")
+    remark_block = "\n".join(lines) + "\n"
+    pdb_path.write_text(remark_block + original, encoding="utf-8")
+    return "\n".join(["=== Final PDB remarks ===", *lines])
 
 
 class App(tk.Tk):
@@ -86,8 +155,8 @@ class App(tk.Tk):
         super().__init__()
         self.title(f"{APP_NAME} {__version__} - Build and Place Nucleic Acid")
         self._set_optional_window_icon()
-        self.geometry("1240x980")
-        self.minsize(1080, 820)
+        self.geometry("1240x1040")
+        self.minsize(1080, 880)
 
         self.param_values_by_type: Dict[str, Dict[str, str]] = {
             na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
@@ -99,7 +168,7 @@ class App(tk.Tk):
         self.grid_columnconfigure(1, weight=1, minsize=460)
         self.grid_columnconfigure(2, weight=0, minsize=120)
         self.grid_columnconfigure(3, weight=1, minsize=300)
-        self.grid_rowconfigure(12, weight=1)
+        self.grid_rowconfigure(13, weight=1)
 
         pad = {"padx": 12, "pady": 6}
 
@@ -211,8 +280,39 @@ class App(tk.Tk):
             variable=self.deleteH_var,
         ).pack(side="left", padx=8)
 
+        self.chirality_frame = ttk.LabelFrame(self, text="Mirror-image L-form chirality")
+        self.chirality_frame.grid(row=10, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.chirality_frame.grid_columnconfigure(4, weight=1)
+        self.invrot_enabled_var = tk.BooleanVar(value=False)
+        self.invrot_operation_var = tk.StringVar(value="oyz")
+        self.invrot_check = ttk.Checkbutton(
+            self.chirality_frame,
+            text="Apply inv/rot after align-to-Z",
+            variable=self.invrot_enabled_var,
+            command=self._on_invrot_toggled,
+        )
+        self.invrot_check.grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(self.chirality_frame, text="Operation:").grid(row=0, column=1, sticky="e", padx=(18, 6), pady=6)
+        self.invrot_operation_combo = ttk.Combobox(
+            self.chirality_frame,
+            textvariable=self.invrot_operation_var,
+            values=INV_ROT_OPERATIONS,
+            width=8,
+            state="disabled",
+        )
+        self.invrot_operation_combo.grid(row=0, column=2, sticky="w", padx=4, pady=6)
+        self.invrot_operation_combo.bind("<<ComboboxSelected>>", lambda *_args: self._refresh_info_text())
+        ttk.Button(self.chirality_frame, text="Help", command=self.open_invrot_help).grid(
+            row=0, column=3, sticky="w", padx=8, pady=6
+        )
+        self.invrot_hint_var = tk.StringVar(value="")
+        ttk.Label(self.chirality_frame, textvariable=self.invrot_hint_var, foreground="#666", wraplength=560).grid(
+            row=0, column=4, sticky="w", padx=8, pady=6
+        )
+        self._refresh_invrot_state()
+
         place = ttk.LabelFrame(self, text="Placement / Orientation")
-        place.grid(row=10, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        place.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=8)
         for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
             place.grid_columnconfigure(col, minsize=minsize)
         place.grid_columnconfigure(7, weight=1)
@@ -255,11 +355,11 @@ class App(tk.Tk):
 
         self.info_var = tk.StringVar(value="")
         ttk.Label(self, textvariable=self.info_var, wraplength=1120, foreground="#444", justify="left").grid(
-            row=11, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
+            row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
         )
 
         log_frame = ttk.LabelFrame(self, text="Log output")
-        log_frame.grid(row=12, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
+        log_frame.grid(row=13, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, wrap="none", height=12)
@@ -276,7 +376,7 @@ class App(tk.Tk):
         self.log_text.configure(state="disabled")
 
         btn_row = ttk.Frame(self)
-        btn_row.grid(row=13, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
+        btn_row.grid(row=14, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
         ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
         self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
         self.generate_btn.pack(side="left", padx=8)
@@ -284,6 +384,7 @@ class App(tk.Tk):
         self.seq_var.trace_add("write", lambda *_args: self._update_sequence_length())
         self.z_len_var.trace_add("write", lambda *_args: self._update_sequence_length())
         self.output_dir_var.trace_add("write", lambda *_args: self._refresh_info_text())
+        self.invrot_operation_var.trace_add("write", lambda *_args: self._refresh_invrot_state())
 
         self.on_type_changed()
         self._refresh_info_text()
@@ -351,12 +452,92 @@ class App(tk.Tk):
         else:
             self.min_hint_var.set("")
 
+    def _on_invrot_toggled(self) -> None:
+        self._refresh_invrot_state()
+        if hasattr(self, "info_var"):
+            self._refresh_info_text()
+
+    def _refresh_invrot_state(self) -> None:
+        if not hasattr(self, "invrot_operation_combo"):
+            return
+        enabled = bool(self.invrot_enabled_var.get())
+        self.invrot_operation_combo.configure(state="readonly" if enabled else "disabled")
+
+        try:
+            mode, label, rotation_axes = parse_operation(self.invrot_operation_var.get())
+            if mode == "o":
+                plane = label.replace("o_", "")
+                hint = f"Reflection across {plane} plane; implemented as inversion + 180-degree rotation around {rotation_axes}."
+            else:
+                axes = rotation_axes if rotation_axes else "none"
+                hint = f"Point inversion mode; 180-degree rotation axes: {axes}."
+        except Exception as exc:
+            hint = f"Invalid inv/rot operation: {exc}"
+        self.invrot_hint_var.set(hint if enabled else "Disabled. Enable to generate a mirror-image L-form before placement.")
+
+    def open_invrot_help(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("L-form inv/rot help")
+        win.geometry("760x520+220+140")
+        win.minsize(680, 460)
+        win.transient(self)
+
+        text = tk.Text(win, wrap="word", height=22)
+        try:
+            text.configure(font=("Helvetica", 11))
+        except Exception:
+            pass
+        text.grid(row=0, column=0, sticky="nsew", padx=14, pady=14)
+        win.grid_columnconfigure(0, weight=1)
+        win.grid_rowconfigure(0, weight=1)
+
+        help_text = """L-form mirror step
+
+This option runs after DSSR align-to-Z and before final placement/orientation. At that point the helix axis is standardized, so the mirror operation is predictable and the normal roll/phi/theta/x/y/z placement controls still work afterward.
+
+Why inv+rot changes chirality
+
+A proper rotation has determinant +1, so it can turn an object but cannot turn a right-handed model into its mirror image. Point inversion maps:
+
+    (x, y, z) -> (-x, -y, -z)
+
+This has determinant -1, so it changes handedness. If you then add any 180-degree rotation, that rotation has determinant +1, so the combined operation still has determinant -1 and still changes chirality. Geometrically, inversion plus a 180-degree rotation is equivalent to reflection across a coordinate plane.
+
+i mode
+
+    i     inversion only: (-x, -y, -z)
+    ix    inversion + 180-degree rotation around x
+    iy    inversion + 180-degree rotation around y
+    iz    inversion + 180-degree rotation around z
+    ixy, ixz, iyz, ixyz are also accepted.
+
+o mode
+
+    oxy   reflection across the xy plane, equivalent to i + Rz(180)
+    oyz   reflection across the yz plane, equivalent to i + Rx(180)
+    oxz   reflection across the xz plane, equivalent to i + Ry(180)
+
+After align-to-Z, oyz and oxz keep the z coordinate sign, so the aligned +Z direction is preserved. oxy and plain i change the z sign, so they reverse the aligned helix direction before placement.
+
+The GUI default is oyz because it changes chirality while keeping the +Z axis direction."""
+
+        text.insert("1.0", help_text)
+        text.configure(state="disabled")
+
+        ttk.Button(win, text="Close", command=win.destroy).grid(row=1, column=0, sticky="e", padx=14, pady=(0, 14))
+
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"
         tmp = str(Path(out).expanduser() / "tmp_file") if out != "<not selected>" else "<not selected>"
-        self.info_var.set(
+        pipeline = (
             "Pipeline: build by selected type -> normalize names -> optional phenix.geometry_minimization "
-            "for B-DNA/A-DNA/A-RNA -> DSSR --more axis extraction -> align to +Z -> orient/place.\n"
+            "for B-DNA/A-DNA/A-RNA -> DSSR --more axis extraction -> align to +Z"
+        )
+        if hasattr(self, "invrot_enabled_var") and self.invrot_enabled_var.get():
+            pipeline += f" -> inv/rot mirror ({self.invrot_operation_var.get().strip() or 'i'})"
+        pipeline += " -> orient/place."
+        self.info_var.set(
+            f"{pipeline}\n"
             f"Final placed PDB folder: {out}\n"
             f"Intermediate files folder: {tmp}"
         )
@@ -577,6 +758,10 @@ class App(tk.Tk):
         try:
             param_overrides = self._get_param_overrides()
             output_dir, tmp_dir = _ensure_output_dirs(self.output_dir_var.get())
+            invrot_enabled = bool(self.invrot_enabled_var.get())
+            invrot_operation = self.invrot_operation_var.get().strip() if invrot_enabled else ""
+            if invrot_enabled:
+                parse_operation(invrot_operation)
         except Exception as exc:
             messagebox.showerror("Input error", str(exc), parent=self)
             return
@@ -599,6 +784,7 @@ class App(tk.Tk):
             f"Intermediate folder: {tmp_dir}\n"
             f"phenix.geometry_minimization: {'ON' if run_phenix else 'OFF'}\n"
             f"Delete hydrogens: {deleteH}\n"
+            f"L-form inv/rot mirror: {'ON (' + invrot_operation + ')' if invrot_enabled else 'OFF'}\n"
         )
 
         try:
@@ -655,9 +841,21 @@ class App(tk.Tk):
                 raise ValueError(f"Unsupported type: {na_type}")
 
             aligned_pdb = Path(str(result["pdb_aligned"]))
-            placed_pdb = _final_placed_path(output_dir, str(result.get("base_name", "bnp_na_helix")))
+            placement_input_pdb = aligned_pdb
+            invrot_result = None
+            mirror_suffix = ""
+            if invrot_enabled:
+                invrot_result = apply_inv_rot_to_pdb(aligned_pdb, instruction=invrot_operation)
+                placement_input_pdb = Path(str(invrot_result["pdb_out"]))
+                mirror_suffix = f"L_{invrot_result['label']}"
+
+            placed_pdb = _final_placed_path(
+                output_dir,
+                str(result.get("base_name", "bnp_na_helix")),
+                suffix=mirror_suffix,
+            )
             place_result = place_after_Z(
-                str(aligned_pdb),
+                str(placement_input_pdb),
                 str(placed_pdb),
                 roll_deg=self.roll_var.get(),
                 phi_deg=self.phi_var.get(),
@@ -666,6 +864,12 @@ class App(tk.Tk):
                 ty=self.y_var.get(),
                 tz=self.z_var.get(),
                 delta_z=self.delta_z_var.get(),
+            )
+            remarks_log = _prepend_final_pdb_remarks(
+                placed_pdb,
+                na_type=na_type,
+                l_form_enabled=invrot_enabled,
+                invrot_result=invrot_result,
             )
 
             log_parts = [
@@ -682,11 +886,13 @@ class App(tk.Tk):
                     "=== GUI parameter overrides applied ===",
                     ", ".join(f"{key}={value:.4f}" for key, value in param_overrides.items()),
                 ]
-            log_parts += ["", str(place_result.get("log_text", ""))]
+            if invrot_result:
+                log_parts += ["", str(invrot_result.get("log_text", ""))]
+            log_parts += ["", str(place_result.get("log_text", "")), "", remarks_log]
             self._set_log("\n".join(log_parts))
             messagebox.showinfo("bnp_na complete", f"Final placed PDB:\n{placed_pdb}", parent=self)
 
-        except (PipelineError, PlacerError) as exc:
+        except (PipelineError, PlacerError, InvRotError) as exc:
             self._set_log(getattr(exc, "log_text", "") or str(exc))
             messagebox.showerror("Job failed", str(exc), parent=self)
         except Exception as exc:
