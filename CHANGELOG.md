@@ -8,6 +8,7 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 - Updated the mirror-image chirality module title to `Mirror-image L-form chirality (L-DNA)`.
 - Replaced the one-line current helical-parameter display with a compact three-row horizontal table showing current values, defaults, and default/custom source status.
 - Added default-value labels beside every helical-parameter entry in the customization dialog.
+- Reduced vertical padding between input rows and switched explanatory/status text to smaller GUI fonts to free more vertical space.
 
 ## V13.5
 

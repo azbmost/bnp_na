@@ -161,6 +161,10 @@ class App(tk.Tk):
         self.minsize(1080, 920)
         self._style = ttk.Style(self)
         self._style.configure("Bold.TLabelframe.Label", font=("Helvetica", 11, "bold"))
+        self._style.configure("Hint.TLabel", foreground="#666", font=("Helvetica", 9))
+        self._style.configure("Status.TLabel", foreground="#555", font=("Helvetica", 9))
+        self._style.configure("Compact.Treeview", rowheight=18, font=("Helvetica", 9))
+        self._style.configure("Compact.Treeview.Heading", font=("Helvetica", 9, "bold"))
 
         self.param_values_by_type: Dict[str, Dict[str, str]] = {
             na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
@@ -174,18 +178,20 @@ class App(tk.Tk):
         self.grid_columnconfigure(3, weight=1, minsize=300)
         self.grid_rowconfigure(14, weight=1)
 
-        pad = {"padx": 12, "pady": 6}
+        pad = {"padx": 10, "pady": 3}
+        frame_pad = {"padx": 12, "pady": 4}
+        inner_y = 3
 
         title = ttk.Label(
             self,
             text=f"{APP_NAME} {__version__} — Building and placing nucleic acid",
             font=("Helvetica", 14, "bold"),
         )
-        title.grid(row=0, column=0, columnspan=4, sticky="w", padx=12, pady=(12, 6))
+        title.grid(row=0, column=0, columnspan=4, sticky="w", padx=12, pady=(10, 4))
 
         self.dssr_status_var = tk.StringVar(value="x3dna-dssr: checking after GUI starts...")
-        ttk.Label(self, textvariable=self.dssr_status_var, foreground="#444").grid(
-            row=1, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 4)
+        ttk.Label(self, textvariable=self.dssr_status_var, style="Status.TLabel").grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 2)
         )
 
         ttk.Label(self, text="Sequence (5'->3'):").grid(
@@ -195,7 +201,7 @@ class App(tk.Tk):
         self.seq_entry = ttk.Entry(self, textvariable=self.seq_var)
         self.seq_entry.grid(row=2, column=1, columnspan=2, sticky="we", **pad)
         self.length_var = tk.StringVar(value="Length: 0 bp")
-        ttk.Label(self, textvariable=self.length_var, foreground="#555").grid(row=2, column=3, sticky="w", **pad)
+        ttk.Label(self, textvariable=self.length_var, style="Status.TLabel").grid(row=2, column=3, sticky="w", **pad)
 
         self.z_len_label = ttk.Label(self, text="Z-DNA helix length:")
         self.z_len_var = tk.StringVar(value="")
@@ -203,7 +209,7 @@ class App(tk.Tk):
         self.z_hint = ttk.Label(
             self,
             text="Z-DNA fiber has a fixed sequence; the Sequence field and DSSR parameter table are ignored.",
-            foreground="#666",
+            style="Hint.TLabel",
             wraplength=460,
         )
         self.z_len_label.grid(row=3, column=0, sticky="e", **pad)
@@ -225,7 +231,7 @@ class App(tk.Tk):
         ttk.Button(self, text="Browse", command=self.browse_output_dir).grid(row=5, column=2, sticky="w", **pad)
 
         type_frame = ttk.LabelFrame(self, text="Nucleic acid type", style="Bold.TLabelframe")
-        type_frame.grid(row=6, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        type_frame.grid(row=6, column=0, columnspan=4, sticky="we", **frame_pad)
         self.na_type_var = tk.StringVar(value="B-DNA")
         for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
             ttk.Radiobutton(
@@ -234,14 +240,14 @@ class App(tk.Tk):
                 value=label,
                 variable=self.na_type_var,
                 command=self.on_type_changed,
-            ).grid(row=0, column=idx, padx=8, pady=4, sticky="w")
+            ).grid(row=0, column=idx, padx=8, pady=inner_y, sticky="w")
 
         self.param_frame = ttk.LabelFrame(
             self,
             text="Current DSSR helical parameters",
             style="Bold.TLabelframe",
         )
-        self.param_frame.grid(row=7, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.param_frame.grid(row=7, column=0, columnspan=4, sticky="we", **frame_pad)
         self.param_frame.grid_columnconfigure(1, weight=1)
 
         self.custom_btn = ttk.Button(
@@ -249,15 +255,15 @@ class App(tk.Tk):
             text="Customize DSSR parameters",
             command=self.open_param_dialog,
         )
-        self.custom_btn.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 6))
+        self.custom_btn.grid(row=0, column=0, sticky="w", padx=8, pady=(4, 3))
         self.param_status_var = tk.StringVar(value="")
         ttk.Label(
             self.param_frame,
             textvariable=self.param_status_var,
-            foreground="#555",
+            style="Status.TLabel",
             justify="left",
             wraplength=820,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=(8, 6))
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=(4, 3))
 
         self.param_table = ttk.Treeview(
             self.param_frame,
@@ -265,6 +271,7 @@ class App(tk.Tk):
             show="headings",
             height=3,
             selectmode="none",
+            style="Compact.Treeview",
         )
         for column, heading, width, anchor in (("row_label", "", 72, "w"),):
             self.param_table.heading(column, text=heading)
@@ -272,10 +279,10 @@ class App(tk.Tk):
         for key in PARAM_KEYS:
             self.param_table.heading(key, text=PARAM_LABELS.get(key, key))
             self.param_table.column(key, width=80, anchor="center", stretch=True)
-        self.param_table.grid(row=1, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 8))
+        self.param_table.grid(row=1, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 4))
 
         self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization", style="Bold.TLabelframe")
-        self.min_frame.grid(row=8, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.min_frame.grid(row=8, column=0, columnspan=4, sticky="we", **frame_pad)
         self.min_frame.grid_columnconfigure(1, weight=1)
         self.minimize_var = tk.BooleanVar(value=DEFAULT_MINIMIZE_BY_TYPE["B-DNA"])
         self.min_check = ttk.Checkbutton(
@@ -284,21 +291,21 @@ class App(tk.Tk):
             variable=self.minimize_var,
             command=self._on_minimize_toggled,
         )
-        self.min_check.grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Label(self.min_frame, text="Params file (.eff / .params):").grid(row=0, column=1, sticky="e", padx=8, pady=6)
+        self.min_check.grid(row=0, column=0, sticky="w", padx=8, pady=inner_y)
+        ttk.Label(self.min_frame, text="Params file (.eff / .params):").grid(row=0, column=1, sticky="e", padx=8, pady=inner_y)
         self.params_var = tk.StringVar(value=_path_text(DEFAULT_PARAMS_FILE))
         self.params_entry = ttk.Entry(self.min_frame, textvariable=self.params_var)
-        self.params_entry.grid(row=0, column=2, sticky="we", padx=8, pady=6)
+        self.params_entry.grid(row=0, column=2, sticky="we", padx=8, pady=inner_y)
         self.min_frame.grid_columnconfigure(2, weight=1)
         self.params_browse_btn = ttk.Button(self.min_frame, text="Browse", command=self.browse_params)
-        self.params_browse_btn.grid(row=0, column=3, sticky="w", padx=8, pady=6)
+        self.params_browse_btn.grid(row=0, column=3, sticky="w", padx=8, pady=inner_y)
         self.min_hint_var = tk.StringVar(value="")
-        ttk.Label(self.min_frame, textvariable=self.min_hint_var, foreground="#666", wraplength=960).grid(
-            row=1, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6)
+        ttk.Label(self.min_frame, textvariable=self.min_hint_var, style="Hint.TLabel", wraplength=960).grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 3)
         )
 
         options_row = ttk.Frame(self)
-        options_row.grid(row=9, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 6))
+        options_row.grid(row=9, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 3))
         self.deleteH_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             options_row,
@@ -311,7 +318,7 @@ class App(tk.Tk):
             text="Mirror-image L-form chirality (L-DNA)",
             style="Bold.TLabelframe",
         )
-        self.chirality_frame.grid(row=10, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.chirality_frame.grid(row=10, column=0, columnspan=4, sticky="we", **frame_pad)
         self.chirality_frame.grid_columnconfigure(4, weight=1)
         self.invrot_enabled_var = tk.BooleanVar(value=False)
         self.invrot_operation_var = tk.StringVar(value="oyz")
@@ -321,8 +328,8 @@ class App(tk.Tk):
             variable=self.invrot_enabled_var,
             command=self._on_invrot_toggled,
         )
-        self.invrot_check.grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Label(self.chirality_frame, text="Operation:").grid(row=0, column=1, sticky="e", padx=(18, 6), pady=6)
+        self.invrot_check.grid(row=0, column=0, sticky="w", padx=8, pady=inner_y)
+        ttk.Label(self.chirality_frame, text="Operation:").grid(row=0, column=1, sticky="e", padx=(18, 6), pady=inner_y)
         self.invrot_operation_combo = ttk.Combobox(
             self.chirality_frame,
             textvariable=self.invrot_operation_var,
@@ -330,19 +337,19 @@ class App(tk.Tk):
             width=8,
             state="disabled",
         )
-        self.invrot_operation_combo.grid(row=0, column=2, sticky="w", padx=4, pady=6)
+        self.invrot_operation_combo.grid(row=0, column=2, sticky="w", padx=4, pady=inner_y)
         self.invrot_operation_combo.bind("<<ComboboxSelected>>", lambda *_args: self._refresh_info_text())
         ttk.Button(self.chirality_frame, text="Help", command=self.open_invrot_help).grid(
-            row=0, column=3, sticky="w", padx=8, pady=6
+            row=0, column=3, sticky="w", padx=8, pady=inner_y
         )
         self.invrot_hint_var = tk.StringVar(value="")
-        ttk.Label(self.chirality_frame, textvariable=self.invrot_hint_var, foreground="#666", wraplength=560).grid(
-            row=0, column=4, sticky="w", padx=8, pady=6
+        ttk.Label(self.chirality_frame, textvariable=self.invrot_hint_var, style="Hint.TLabel", wraplength=560).grid(
+            row=0, column=4, sticky="w", padx=8, pady=inner_y
         )
         self._refresh_invrot_state()
 
         place = ttk.LabelFrame(self, text="Placement / Orientation", style="Bold.TLabelframe")
-        place.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        place.grid(row=11, column=0, columnspan=4, sticky="we", **frame_pad)
         for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
             place.grid_columnconfigure(col, minsize=minsize)
         place.grid_columnconfigure(7, weight=1)
@@ -355,63 +362,63 @@ class App(tk.Tk):
         self.theta_var = tk.DoubleVar(value=0.0)
         self.delta_z_var = tk.DoubleVar(value=0.0)
 
-        ttk.Label(place, text="delta_z (A)").grid(row=0, column=0, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.delta_z_var, width=10).grid(row=0, column=1, sticky="w", padx=2, pady=5)
-        ttk.Label(place, text="delta_z should be 0 for most cases.", foreground="#555").grid(
-            row=0, column=2, columnspan=4, sticky="w", padx=(20, 6), pady=5
+        ttk.Label(place, text="delta_z (A)").grid(row=0, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.delta_z_var, width=10).grid(row=0, column=1, sticky="w", padx=2, pady=inner_y)
+        ttk.Label(place, text="delta_z should be 0 for most cases.", style="Status.TLabel").grid(
+            row=0, column=2, columnspan=4, sticky="w", padx=(20, 6), pady=inner_y
         )
 
-        ttk.Label(place, text="x (A)").grid(row=1, column=0, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.x_var, width=10).grid(row=1, column=1, sticky="w", padx=2, pady=5)
-        ttk.Label(place, text="y (A)").grid(row=1, column=2, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.y_var, width=10).grid(row=1, column=3, sticky="w", padx=2, pady=5)
-        ttk.Label(place, text="z (A)").grid(row=1, column=4, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.z_var, width=10).grid(row=1, column=5, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="x (A)").grid(row=1, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.x_var, width=10).grid(row=1, column=1, sticky="w", padx=2, pady=inner_y)
+        ttk.Label(place, text="y (A)").grid(row=1, column=2, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.y_var, width=10).grid(row=1, column=3, sticky="w", padx=2, pady=inner_y)
+        ttk.Label(place, text="z (A)").grid(row=1, column=4, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.z_var, width=10).grid(row=1, column=5, sticky="w", padx=2, pady=inner_y)
 
-        ttk.Label(place, text="roll (deg)").grid(row=2, column=0, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.roll_var, width=10).grid(row=2, column=1, sticky="w", padx=2, pady=5)
-        ttk.Label(place, text="phi (deg)").grid(row=2, column=2, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.phi_var, width=10).grid(row=2, column=3, sticky="w", padx=2, pady=5)
-        ttk.Label(place, text="theta (deg)").grid(row=2, column=4, sticky="e", padx=6, pady=5)
-        ttk.Entry(place, textvariable=self.theta_var, width=10).grid(row=2, column=5, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="roll (deg)").grid(row=2, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.roll_var, width=10).grid(row=2, column=1, sticky="w", padx=2, pady=inner_y)
+        ttk.Label(place, text="phi (deg)").grid(row=2, column=2, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.phi_var, width=10).grid(row=2, column=3, sticky="w", padx=2, pady=inner_y)
+        ttk.Label(place, text="theta (deg)").grid(row=2, column=4, sticky="e", padx=6, pady=inner_y)
+        ttk.Entry(place, textvariable=self.theta_var, width=10).grid(row=2, column=5, sticky="w", padx=2, pady=inner_y)
 
         ttk.Label(
             place,
             text="For GIDEON: roll = roll at GIDEON - 111.25",
-            foreground="#555",
+            style="Status.TLabel",
             justify="left",
             wraplength=420,
-        ).grid(row=3, column=0, columnspan=4, sticky="w", padx=(20, 6), pady=(0, 6))
+        ).grid(row=3, column=0, columnspan=4, sticky="w", padx=(20, 6), pady=(0, 3))
 
         self.info_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.info_var, wraplength=1120, foreground="#444", justify="left").grid(
-            row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
+        ttk.Label(self, textvariable=self.info_var, wraplength=1120, style="Status.TLabel", justify="left").grid(
+            row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 3)
         )
 
         tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
-        tools.grid(row=13, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
         tools.grid_columnconfigure(1, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
-            row=0, column=0, sticky="w", padx=8, pady=6
+            row=0, column=0, sticky="w", padx=8, pady=inner_y
         )
         ttk.Label(
             tools,
             text="Measure the around-axis angle between two atom or XYZ points and write a Chimera/ChimeraX .bild file.",
-            foreground="#666",
+            style="Hint.TLabel",
             wraplength=850,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=inner_y)
         ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
-            row=1, column=0, sticky="w", padx=8, pady=6
+            row=1, column=0, sticky="w", padx=8, pady=inner_y
         )
         ttk.Label(
             tools,
             text="Create a red/yellow/blue coordinate-axis .bild helper with configurable arrow length and width.",
-            foreground="#666",
+            style="Hint.TLabel",
             wraplength=850,
-        ).grid(row=1, column=1, sticky="w", padx=8, pady=6)
+        ).grid(row=1, column=1, sticky="w", padx=8, pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
-        log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
+        log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, wrap="none", height=12)
@@ -428,7 +435,7 @@ class App(tk.Tk):
         self.log_text.configure(state="disabled")
 
         btn_row = ttk.Frame(self)
-        btn_row.grid(row=15, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
+        btn_row.grid(row=15, column=0, columnspan=4, sticky="e", padx=12, pady=(4, 8))
         ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
         self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
         self.generate_btn.pack(side="left", padx=8)
@@ -536,10 +543,10 @@ class App(tk.Tk):
 
         text = tk.Text(win, wrap="word", height=22)
         try:
-            text.configure(font=("Helvetica", 11))
+            text.configure(font=("Helvetica", 10))
         except Exception:
             pass
-        text.grid(row=0, column=0, sticky="nsew", padx=14, pady=14)
+        text.grid(row=0, column=0, sticky="nsew", padx=12, pady=12)
         win.grid_columnconfigure(0, weight=1)
         win.grid_rowconfigure(0, weight=1)
 
@@ -576,7 +583,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         text.insert("1.0", help_text)
         text.configure(state="disabled")
 
-        ttk.Button(win, text="Close", command=win.destroy).grid(row=1, column=0, sticky="e", padx=14, pady=(0, 14))
+        ttk.Button(win, text="Close", command=win.destroy).grid(row=1, column=0, sticky="e", padx=12, pady=(0, 12))
 
     def open_axis_angle_tool(self) -> None:
         try:
@@ -644,7 +651,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             messagebox.showinfo("XYZ axes BILD", f"Wrote:\n{written}", parent=win)
             win.destroy()
 
-        pad = {"padx": 10, "pady": 6}
+        pad = {"padx": 10, "pady": 4}
         ttk.Label(win, text="Output .bild:").grid(row=0, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=out_var).grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(win, text="Browse", command=browse_out).grid(row=0, column=2, sticky="w", **pad)
@@ -664,12 +671,12 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         ttk.Label(
             win,
             text="Colors: X red, Y yellow, Z blue. Arrow head radius is 2.5 x arrow width.",
-            foreground="#666",
+            style="Hint.TLabel",
             wraplength=460,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=(4, 8))
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
 
         buttons = ttk.Frame(win)
-        buttons.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=(4, 10))
+        buttons.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=(3, 8))
         ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="left", padx=6)
         ttk.Button(buttons, text="Write", command=write_file).pack(side="left", padx=6)
 
@@ -795,28 +802,28 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 "Previously saved custom values are kept. Values are written to four digits after the decimal."
             ),
             wraplength=900,
-            foreground="#555",
+            style="Hint.TLabel",
             justify="left",
-        ).grid(row=0, column=0, columnspan=6, sticky="w", padx=14, pady=(14, 8))
+        ).grid(row=0, column=0, columnspan=6, sticky="w", padx=14, pady=(10, 6))
 
         local_vars: Dict[str, tk.StringVar] = {}
         for idx, (key, default) in enumerate(zip(PARAM_KEYS, defaults)):
             col_group = 0 if idx < 6 else 3
             row = idx + 1 if idx < 6 else idx - 5
             ttk.Label(win, text=PARAM_LABELS.get(key, key) + ":").grid(
-                row=row, column=col_group, sticky="e", padx=10, pady=6
+                row=row, column=col_group, sticky="e", padx=10, pady=4
             )
             initial = store.get(key, "").strip()
             local_vars[key] = tk.StringVar(value=initial)
             ttk.Entry(win, textvariable=local_vars[key], width=18).grid(
-                row=row, column=col_group + 1, sticky="w", padx=10, pady=6
+                row=row, column=col_group + 1, sticky="w", padx=10, pady=4
             )
-            ttk.Label(win, text=f"default {default:.4f}", foreground="#666").grid(
-                row=row, column=col_group + 2, sticky="w", padx=(0, 12), pady=6
+            ttk.Label(win, text=f"default {default:.4f}", style="Hint.TLabel").grid(
+                row=row, column=col_group + 2, sticky="w", padx=(0, 12), pady=4
             )
 
         btns = ttk.Frame(win)
-        btns.grid(row=8, column=0, columnspan=6, sticky="e", padx=12, pady=12)
+        btns.grid(row=8, column=0, columnspan=6, sticky="e", padx=12, pady=8)
 
         def clear_all() -> None:
             for key in PARAM_KEYS:
