@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file.
 
-The current app version is `V13.2`.
+The current app version is `V13.3`.
 
 ## What It Does
 
@@ -13,6 +13,7 @@ The current app version is `V13.2`.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
+- Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
 - Writes final PDB files to the selected output folder and intermediate files to `<output folder>/tmp_file/`.
 
@@ -349,7 +350,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.2 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.3 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -371,6 +372,114 @@ You can also run the helper directly:
 python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb oyz
 python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 ```
+
+## Helical-Axis Angle Tool
+
+`bnp_na` V13.3 includes `bnp_na_lib/angle_helical_axisV2.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+
+In the main `bnp_na` GUI, click:
+
+```text
+Open helical-axis angle tool
+```
+
+This opens the angle tool in a separate window.
+
+You can also launch it directly:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2.py
+python3 bnp_na_lib/angle_helical_axisV2.py --gui
+```
+
+### Axis Definition
+
+The tool can define the helical axis in two ways.
+
+`Fit from PDB` uses PCA/SVD on selected axis atoms from a PDB. The default axis atom name is `C1'`, with `C1*` accepted as an alias. You can provide one or more axis atom names in the GUI or with `--axis-atoms`.
+
+`Custom axis` uses a point on the axis plus a direction vector. The direction vector is normalized automatically. In custom-axis mode, a PDB is not required unless one or both points are specified as atoms.
+
+### Point Inputs
+
+Point 1 and Point 2 each have a type selector:
+
+- `Atom`: specify chain, residue number, and atom name, such as `A:5:C1'`.
+- `XYZ`: specify explicit coordinates, such as `1 0 0` or `1,0,0`.
+
+Atom point specifications require a PDB so the atom coordinates can be looked up. XYZ point specifications can be used without a PDB when the axis is also custom.
+
+### Angle Definition
+
+For each point, the tool projects the point onto the axis. The radial vector is:
+
+```text
+point - closest point on axis
+```
+
+The report includes:
+
+- Distance from each point to the axis.
+- The radial unit vector for each point.
+- An unsigned angle from `0` to `180` degrees between the two radial unit vectors.
+- A signed angle from `-180` to `180` degrees from Point 1 to Point 2 around the axis direction.
+- The signed angle wrapped to `0` to `360` degrees.
+
+The signed angle depends on axis direction. In PDB-fit mode, the tool tries to choose a consistent axis direction by correlating the fitted axis coordinate with residue numbering when enough selected atoms exist. In custom-axis mode, the direction is exactly the axis vector you provide after normalization.
+
+This means custom-axis mode with XYZ points can also be used as a small geometry calculator.
+
+### Command-Line Examples
+
+Fit axis from PDB and use atom points:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2.py -i helix.pdb \
+  --point1 "A:5:C1*" \
+  --point2 "B:18:C1*"
+```
+
+Use a custom axis and XYZ points without a PDB:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2.py \
+  --axis-point "0 0 0" --axis-vector "0 0 1" \
+  --point1 "1 0 0" --point2 "0 1 0" \
+  -o custom_axis_vectors.bild
+```
+
+Use a custom axis and atom points from a PDB:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2.py -i helix.pdb \
+  --axis-point "0 0 0" --axis-vector "0 0 1" \
+  --point1 "A:5:C1*" --point2 "B:18:C1*" \
+  -o helix_custom_axis_vectors.bild
+```
+
+### BILD Output
+
+The tool writes Chimera/ChimeraX `.bild` files using `.comment`, `.color`, `.arrow`, and `.sphere` records. The BILD file draws:
+
+- The fitted or custom helical axis as an arrow.
+- The two radial vectors as arrows.
+- Spheres at the two points.
+- Spheres at the two point projections onto the axis.
+
+Typical visualization workflow:
+
+1. Open the PDB in Chimera or ChimeraX.
+2. Open the generated `.bild` file.
+
+Default drawing sizes are:
+
+```text
+--axis-radius 1.0
+--vector-radius 1.0
+--sphere-radius 1.25
+```
+
+The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html>.
 
 ## Delete Hydrogens
 
@@ -516,6 +625,7 @@ The GUI checks for `assets/bnp_na_icon.png` at startup and continues normally if
 ```text
 bnp_na.py                  Main GUI/controller
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
+bnp_na_lib/angle_helical_axisV2.py Helical-axis radial-angle calculator and BILD writer
 bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
 bnp_na_lib/min_P_C5.params Default Phenix minimization params file

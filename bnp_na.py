@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.2: Building and placing nucleic acid helices.
+"""bnp_na V13.3: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.2"
+__version__ = "V13.3"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -32,6 +32,7 @@ from build_common import (  # noqa: E402
     sequence_alphabet,
 )
 from build_zdna import build_zdna  # noqa: E402
+from angle_helical_axisV2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
 from na_placer import PlacerError, place_after_Z  # noqa: E402
 
@@ -155,8 +156,8 @@ class App(tk.Tk):
         super().__init__()
         self.title(f"{APP_NAME} {__version__} - Build and Place Nucleic Acid")
         self._set_optional_window_icon()
-        self.geometry("1240x1040")
-        self.minsize(1080, 880)
+        self.geometry("1240x1080")
+        self.minsize(1080, 920)
 
         self.param_values_by_type: Dict[str, Dict[str, str]] = {
             na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
@@ -168,7 +169,7 @@ class App(tk.Tk):
         self.grid_columnconfigure(1, weight=1, minsize=460)
         self.grid_columnconfigure(2, weight=0, minsize=120)
         self.grid_columnconfigure(3, weight=1, minsize=300)
-        self.grid_rowconfigure(13, weight=1)
+        self.grid_rowconfigure(14, weight=1)
 
         pad = {"padx": 12, "pady": 6}
 
@@ -311,8 +312,21 @@ class App(tk.Tk):
         )
         self._refresh_invrot_state()
 
+        tools = ttk.LabelFrame(self, text="Analysis tools")
+        tools.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        tools.grid_columnconfigure(1, weight=1)
+        ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
+            row=0, column=0, sticky="w", padx=8, pady=6
+        )
+        ttk.Label(
+            tools,
+            text="Measure the around-axis angle between two atom or XYZ points and write a Chimera/ChimeraX .bild file.",
+            foreground="#666",
+            wraplength=850,
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+
         place = ttk.LabelFrame(self, text="Placement / Orientation")
-        place.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        place.grid(row=12, column=0, columnspan=4, sticky="we", padx=12, pady=8)
         for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
             place.grid_columnconfigure(col, minsize=minsize)
         place.grid_columnconfigure(7, weight=1)
@@ -355,11 +369,11 @@ class App(tk.Tk):
 
         self.info_var = tk.StringVar(value="")
         ttk.Label(self, textvariable=self.info_var, wraplength=1120, foreground="#444", justify="left").grid(
-            row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
+            row=13, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
         )
 
         log_frame = ttk.LabelFrame(self, text="Log output")
-        log_frame.grid(row=13, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
+        log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, wrap="none", height=12)
@@ -376,7 +390,7 @@ class App(tk.Tk):
         self.log_text.configure(state="disabled")
 
         btn_row = ttk.Frame(self)
-        btn_row.grid(row=14, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
+        btn_row.grid(row=15, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
         ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
         self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
         self.generate_btn.pack(side="left", padx=8)
@@ -525,6 +539,12 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         text.configure(state="disabled")
 
         ttk.Button(win, text="Close", command=win.destroy).grid(row=1, column=0, sticky="e", padx=14, pady=(0, 14))
+
+    def open_axis_angle_tool(self) -> None:
+        try:
+            launch_axis_angle_gui(parent=self)
+        except Exception as exc:
+            messagebox.showerror("Helical-axis angle tool", str(exc), parent=self)
 
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"
