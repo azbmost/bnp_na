@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-pdb_make_dna_v3_2.py
+pdb_name_standard.py
 
 Normalize nucleotide residue and atom naming in a PDB file.
 
-v3.2:
-  - Renamed to an import-safe module name.
+This helper was changed from the previous script named
+`pdb_make_dna_v3_2.py`. The public normalization behavior is preserved, but
+the module name now describes the task more directly.
+
+v3.2 history:
+  - Previous script name: pdb_make_dna_v3_2.py.
+  - Current module name: pdb_name_standard.py.
   - Adds public API function normalize_pdb_naming(...) so other scripts can do:
-        from pdb_make_dna_v3_2 import normalize_pdb_naming
+        from pdb_name_standard import normalize_pdb_naming
   - CLI main() now uses the same public API function.
   - Preserves v3.1 behavior:
       * Canonicalize standard 3-letter nucleotide residue names.
@@ -19,10 +24,10 @@ v3.2:
       * Optional hydrogen deletion.
 
 Usage as command line:
-    python pdb_make_dna_v3_2.py input.pdb [--deleteH]
+    python pdb_name_standard.py input.pdb [--deleteH]
 
 Usage as module:
-    from pdb_make_dna_v3_2 import normalize_pdb_naming
+    from pdb_name_standard import normalize_pdb_naming
 
     out_pdb = normalize_pdb_naming("input.pdb")
     out_pdb = normalize_pdb_naming("input.pdb", "output.pdb", deleteH=True)

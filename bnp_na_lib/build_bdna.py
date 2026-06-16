@@ -25,7 +25,7 @@ from build_common import (
     run_phenix_minimization,
     write_helical_table,
 )
-from pdb_make_dna_v3_2 import normalize_pdb_naming as normalize_nucleotide_pdb_naming
+from pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
 
 
 BACKBONE = "B-DNA"
@@ -110,7 +110,7 @@ def build_bdna(
             )
         )
         logs += [
-            "\n=== Normalize PDB naming v3.2 ===",
+            "\n=== Normalize PDB names (pdb_name_standard.py) ===",
             f"Input : {pdb_rebuild}",
             f"Output: {pdb_norm}",
             f"deleteH: {deleteH}",

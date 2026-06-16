@@ -1,44 +1,69 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">bnp_na icon</title>
-  <desc id="desc">A stylized nucleic acid helix aligned inside a square app icon.</desc>
+  <desc id="desc">Right-handed nucleic acid double helix aligned along positive Z with base-pair rungs.</desc>
   <defs>
-    <linearGradient id="background" x1="72" y1="52" x2="440" y2="460" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#10233f"/>
-      <stop offset="0.55" stop-color="#1b5d6a"/>
-      <stop offset="1" stop-color="#2d7a54"/>
+    <linearGradient id="panel" x1="58" y1="34" x2="454" y2="478" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f9fcfd"/>
+      <stop offset="1" stop-color="#dcebef"/>
     </linearGradient>
-    <linearGradient id="strandA" x1="116" y1="88" x2="392" y2="424" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#90e0ef"/>
-      <stop offset="1" stop-color="#f5f871"/>
-    </linearGradient>
-    <linearGradient id="strandB" x1="120" y1="424" x2="396" y2="88" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffb703"/>
-      <stop offset="1" stop-color="#80ed99"/>
-    </linearGradient>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#07111f" flood-opacity="0.32"/>
-    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="8" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M1 1 L10 6 L1 11 Z" fill="#2563eb"/>
+    </marker>
+    <style>
+      .axis { stroke: #2563eb; stroke-width: 6; stroke-linecap: round; marker-end: url(#arrow); }
+      .axis-base { stroke: #5b6b76; stroke-width: 4; stroke-linecap: round; opacity: .55; }
+      .rungs line { stroke: #52616b; stroke-width: 8; stroke-linecap: round; }
+      .strand { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .back-a { stroke: #0f8fb3; stroke-width: 20; opacity: .28; }
+      .back-b { stroke: #c66b13; stroke-width: 20; opacity: .28; }
+      .front-a { stroke: #10a6c9; stroke-width: 22; }
+      .front-b { stroke: #e98722; stroke-width: 22; }
+      .node-a { fill: #d9fbff; stroke: #0f8fb3; stroke-width: 3; }
+      .node-b { fill: #fff0d8; stroke: #d97706; stroke-width: 3; }
+    </style>
   </defs>
-  <rect width="512" height="512" rx="88" fill="url(#background)"/>
-  <circle cx="124" cy="104" r="54" fill="#ffffff" opacity="0.08"/>
-  <circle cx="414" cy="408" r="72" fill="#ffffff" opacity="0.07"/>
-  <g filter="url(#softShadow)">
-    <path d="M170 70 C330 130 330 202 170 256 C330 310 330 382 170 442" fill="none" stroke="url(#strandA)" stroke-width="30" stroke-linecap="round"/>
-    <path d="M342 70 C182 130 182 202 342 256 C182 310 182 382 342 442" fill="none" stroke="url(#strandB)" stroke-width="30" stroke-linecap="round"/>
-    <g stroke="#e9fbff" stroke-width="18" stroke-linecap="round" opacity="0.92">
-      <path d="M209 116 L303 116"/>
-      <path d="M184 186 L328 186"/>
-      <path d="M172 256 L340 256"/>
-      <path d="M184 326 L328 326"/>
-      <path d="M209 396 L303 396"/>
-    </g>
-    <g fill="#f8fbff">
-      <circle cx="170" cy="70" r="20"/>
-      <circle cx="342" cy="70" r="20"/>
-      <circle cx="170" cy="256" r="20"/>
-      <circle cx="342" cy="256" r="20"/>
-      <circle cx="170" cy="442" r="20"/>
-      <circle cx="342" cy="442" r="20"/>
-    </g>
+  <rect x="18" y="18" width="476" height="476" rx="92" fill="url(#panel)"/>
+  <rect x="30" y="30" width="452" height="452" rx="78" fill="none" stroke="#1f3440" stroke-width="8" opacity=".90"/>
+  <g opacity=".38">
+    <path d="M118 416 L382 416" class="axis-base"/>
+    <path d="M256 416 L146 446" class="axis-base"/>
+  </g>
+  <path d="M398 410 L398 102" class="axis"/>
+  <g class="rungs">
+    <line x1="327.6" y1="410.4" x2="184.4" y2="410.4" opacity="0.72"/>
+    <line x1="331.4" y1="392.8" x2="180.6" y2="392.8" opacity="0.73"/>
+    <line x1="302.7" y1="375.2" x2="209.3" y2="375.2" opacity="0.64"/>
+    <line x1="206.1" y1="340.0" x2="305.9" y2="340.0" opacity="0.65"/>
+    <line x1="179.7" y1="322.4" x2="332.3" y2="322.4" opacity="0.73"/>
+    <line x1="186.1" y1="304.8" x2="325.9" y2="304.8" opacity="0.72"/>
+    <line x1="222.5" y1="287.2" x2="289.5" y2="287.2" opacity="0.60"/>
+    <line x1="273.3" y1="269.6" x2="238.7" y2="269.6" opacity="0.55"/>
+    <line x1="316.7" y1="252.0" x2="195.3" y2="252.0" opacity="0.69"/>
+    <line x1="334.0" y1="234.4" x2="178.0" y2="234.4" opacity="0.74"/>
+    <line x1="317.8" y1="216.8" x2="194.2" y2="216.8" opacity="0.69"/>
+    <line x1="275.0" y1="199.2" x2="237.0" y2="199.2" opacity="0.56"/>
+    <line x1="224.0" y1="181.6" x2="288.0" y2="181.6" opacity="0.60"/>
+    <line x1="186.8" y1="164.0" x2="325.2" y2="164.0" opacity="0.71"/>
+    <line x1="179.4" y1="146.4" x2="332.6" y2="146.4" opacity="0.74"/>
+    <line x1="204.8" y1="128.8" x2="307.2" y2="128.8" opacity="0.66"/>
+    <line x1="301.3" y1="93.6" x2="210.7" y2="93.6" opacity="0.64"/>
+  </g>
+  <polyline points="287.9,430.0 297.6,426.3 306.6,422.5 314.5,418.8 321.2,415.0 326.6,411.3 330.6,407.5 333.1,403.8 334.0,400.0 333.3,396.3 331.1,392.5 327.4,388.8 322.2,385.0 315.7,381.3 308.0,377.5 299.3,373.8 289.6,370.0 279.3,366.3 268.5,362.5 257.5,358.8 246.4,355.1 235.5,351.3 225.1,347.6 215.2,343.8 206.2,340.1 198.2,336.3 191.4,332.6 185.8,328.8 181.7,325.1 179.1,321.3 178.0,317.6 178.5,313.8 180.6,310.1 184.2,306.3 189.2,302.6 195.6,298.8 203.2,295.1 211.9,291.3 221.5,287.6 231.7,283.9 242.5,280.1 253.5,276.4 264.6,272.6 275.5,268.9 286.0,265.1 295.9,261.4 305.0,257.6 313.1,253.9 320.0,250.1 325.7,246.4 330.0,242.6 332.7,238.9 333.9,235.1 333.6,231.4 331.7,227.6 328.2,223.9 323.3,220.1 317.0,216.4 309.5,212.7 301.0,208.9 291.5,205.2 281.3,201.4 270.6,197.7 259.5,193.9 248.5,190.2 237.5,186.4 227.0,182.7 217.0,178.9 207.8,175.2 199.6,171.4 192.6,167.7 186.8,163.9 182.4,160.2 179.5,156.4 178.1,152.7 178.3,148.9 180.1,145.2 183.4,141.5 188.2,137.7 194.3,134.0 201.7,130.2 210.2,126.5 219.6,122.7 229.8,119.0 240.4,115.2 251.4,111.5 262.5,107.7 273.5,104.0 284.1,100.2 294.1,96.5 303.3,92.7 311.7,89.0 318.8,85.2 324.8,81.5 329.3,77.7 332.3,74.0" class="strand back-a"/>
+  <polyline points="224.1,430.0 214.4,426.3 205.4,422.5 197.5,418.8 190.8,415.0 185.4,411.3 181.4,407.5 178.9,403.8 178.0,400.0 178.7,396.3 180.9,392.5 184.6,388.8 189.8,385.0 196.3,381.3 204.0,377.5 212.7,373.8 222.4,370.0 232.7,366.3 243.5,362.5 254.5,358.8 265.6,355.1 276.5,351.3 286.9,347.6 296.8,343.8 305.8,340.1 313.8,336.3 320.6,332.6 326.2,328.8 330.3,325.1 332.9,321.3 334.0,317.6 333.5,313.8 331.4,310.1 327.8,306.3 322.8,302.6 316.4,298.8 308.8,295.1 300.1,291.3 290.5,287.6 280.3,283.9 269.5,280.1 258.5,276.4 247.4,272.6 236.5,268.9 226.0,265.1 216.1,261.4 207.0,257.6 198.9,253.9 192.0,250.1 186.3,246.4 182.0,242.6 179.3,238.9 178.1,235.1 178.4,231.4 180.3,227.6 183.8,223.9 188.7,220.1 195.0,216.4 202.5,212.7 211.0,208.9 220.5,205.2 230.7,201.4 241.4,197.7 252.5,193.9 263.5,190.2 274.5,186.4 285.0,182.7 295.0,178.9 304.2,175.2 312.4,171.4 319.4,167.7 325.2,163.9 329.6,160.2 332.5,156.4 333.9,152.7 333.7,148.9 331.9,145.2 328.6,141.5 323.8,137.7 317.7,134.0 310.3,130.2 301.8,126.5 292.4,122.7 282.2,119.0 271.6,115.2 260.6,111.5 249.5,107.7 238.5,104.0 227.9,100.2 217.9,96.5 208.7,92.7 200.3,89.0 193.2,85.2 187.2,81.5 182.7,77.7 179.7,74.0" class="strand back-b"/>
+  <g>
+    <polyline points="287.9,430.0 297.6,426.3 306.6,422.5 314.5,418.8 321.2,415.0 326.6,411.3 330.6,407.5 333.1,403.8 334.0,400.0" class="strand front-a"/>
+    <polyline points="178.5,313.8 180.6,310.1 184.2,306.3 189.2,302.6 195.6,298.8 203.2,295.1 211.9,291.3 221.5,287.6 231.7,283.9 242.5,280.1 253.5,276.4 264.6,272.6 275.5,268.9 286.0,265.1 295.9,261.4 305.0,257.6 313.1,253.9 320.0,250.1 325.7,246.4 330.0,242.6 332.7,238.9 333.9,235.1" class="strand front-a"/>
+    <polyline points="178.3,148.9 180.1,145.2 183.4,141.5 188.2,137.7 194.3,134.0 201.7,130.2 210.2,126.5 219.6,122.7 229.8,119.0 240.4,115.2 251.4,111.5 262.5,107.7 273.5,104.0 284.1,100.2 294.1,96.5 303.3,92.7 311.7,89.0 318.8,85.2 324.8,81.5 329.3,77.7 332.3,74.0" class="strand front-a"/>
+    <polyline points="178.7,396.3 180.9,392.5 184.6,388.8 189.8,385.0 196.3,381.3 204.0,377.5 212.7,373.8 222.4,370.0 232.7,366.3 243.5,362.5 254.5,358.8 265.6,355.1 276.5,351.3 286.9,347.6 296.8,343.8 305.8,340.1 313.8,336.3 320.6,332.6 326.2,328.8 330.3,325.1 332.9,321.3 334.0,317.6" class="strand front-b"/>
+    <polyline points="178.4,231.4 180.3,227.6 183.8,223.9 188.7,220.1 195.0,216.4 202.5,212.7 211.0,208.9 220.5,205.2 230.7,201.4 241.4,197.7 252.5,193.9 263.5,190.2 274.5,186.4 285.0,182.7 295.0,178.9 304.2,175.2 312.4,171.4 319.4,167.7 325.2,163.9 329.6,160.2 332.5,156.4 333.9,152.7" class="strand front-b"/>
+  </g>
+  <g>
+    <circle cx="241.4" cy="280.5" r="6.2" class="node-a"/>
+    <circle cx="331.1" cy="241.3" r="6.2" class="node-a"/>
+    <circle cx="216.7" cy="123.8" r="6.2" class="node-a"/>
+    <circle cx="179.6" cy="394.4" r="6.2" class="node-b"/>
+    <circle cx="254.5" cy="358.8" r="6.2" class="node-b"/>
+    <circle cx="228.6" cy="202.2" r="6.2" class="node-b"/>
+    <circle cx="326.5" cy="163.0" r="6.2" class="node-b"/>
   </g>
 </svg>
