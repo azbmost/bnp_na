@@ -1,0 +1,709 @@
+#!/usr/bin/env python3
+"""bnp_na V13.1: Building and placing nucleic acid helices.
+
+Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
+"""
+from __future__ import annotations
+
+import re
+import sys
+import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox, ttk
+from typing import Dict, Optional, Tuple
+
+__version__ = "V13.1"
+APP_NAME = "bnp_na"
+
+APP_DIR = Path(__file__).resolve().parent
+LIB_DIR = APP_DIR / "bnp_na_lib"
+sys.path.insert(0, str(LIB_DIR))
+
+from build_adna import build_adna  # noqa: E402
+from build_arna import build_arna  # noqa: E402
+from build_bdna import build_bdna  # noqa: E402
+from build_common import (  # noqa: E402
+    DEFAULT_PARAMS,
+    PARAM_KEYS,
+    PipelineError,
+    check_dssr_installation,
+    expand_sequence,
+    sanitize_basename,
+    sequence_alphabet,
+)
+from build_zdna import build_zdna  # noqa: E402
+from na_placer import PlacerError, place_after_Z  # noqa: E402
+
+
+PARAM_LABELS = {
+    "Shear": "Shear",
+    "Stretch": "Stretch",
+    "Stagger": "Stagger",
+    "Buckle": "Buckle",
+    "Propeller": "Propeller",
+    "Opening": "Opening",
+    "X-disp": "X-disp",
+    "Y-disp": "Y-disp",
+    "h-Rise": "h-Rise",
+    "Incl.": "Incl.",
+    "Tip": "Tip",
+    "h-Twist": "h-Twist",
+}
+
+DEFAULT_PARAMS_FILE = LIB_DIR / "min_P_C5.params"
+DEFAULT_OUTPUT_DIR = APP_DIR / "output"
+DEFAULT_ICON_FILE = APP_DIR / "assets" / "bnp_na_icon.png"
+NA_TYPES_WITH_TABLE = ("B-DNA", "A-DNA", "A-RNA")
+DEFAULT_MINIMIZE_BY_TYPE = {"B-DNA": True, "A-DNA": False, "A-RNA": False}
+
+
+def _path_text(path: Path) -> str:
+    try:
+        return str(path.resolve())
+    except Exception:
+        return str(path)
+
+
+def _ensure_output_dirs(output_dir_text: str) -> Tuple[Path, Path]:
+    if not output_dir_text.strip():
+        raise ValueError("Please choose an output folder.")
+    output_dir = Path(output_dir_text).expanduser()
+    if not output_dir.is_absolute():
+        output_dir = output_dir.resolve()
+    tmp_dir = output_dir / "tmp_file"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir, tmp_dir
+
+
+def _final_placed_path(output_dir: Path, base_name: str) -> Path:
+    safe = sanitize_basename(base_name or "bnp_na_helix") or "bnp_na_helix"
+    return output_dir / f"{safe}_oriented_placed.pdb"
+
+
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title(f"{APP_NAME} {__version__} - Build and Place Nucleic Acid")
+        self._set_optional_window_icon()
+        self.geometry("1240x980")
+        self.minsize(1080, 820)
+
+        self.param_values_by_type: Dict[str, Dict[str, str]] = {
+            na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
+        }
+        self.minimize_by_type: Dict[str, bool] = dict(DEFAULT_MINIMIZE_BY_TYPE)
+        self._active_na_type: Optional[str] = None
+
+        self.grid_columnconfigure(0, weight=0, minsize=260)
+        self.grid_columnconfigure(1, weight=1, minsize=460)
+        self.grid_columnconfigure(2, weight=0, minsize=120)
+        self.grid_columnconfigure(3, weight=1, minsize=300)
+        self.grid_rowconfigure(12, weight=1)
+
+        pad = {"padx": 12, "pady": 6}
+
+        title = ttk.Label(
+            self,
+            text=f"{APP_NAME} {__version__} — Building and placing nucleic acid",
+            font=("Helvetica", 14, "bold"),
+        )
+        title.grid(row=0, column=0, columnspan=4, sticky="w", padx=12, pady=(12, 6))
+
+        self.dssr_status_var = tk.StringVar(value="x3dna-dssr: checking after GUI starts...")
+        ttk.Label(self, textvariable=self.dssr_status_var, foreground="#444").grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 4)
+        )
+
+        ttk.Label(self, text="Sequence (5'->3'):", font=("Helvetica", 11, "bold")).grid(
+            row=2, column=0, sticky="e", **pad
+        )
+        self.seq_var = tk.StringVar(value="")
+        self.seq_entry = ttk.Entry(self, textvariable=self.seq_var)
+        self.seq_entry.grid(row=2, column=1, columnspan=2, sticky="we", **pad)
+        self.length_var = tk.StringVar(value="Length: 0 bp")
+        ttk.Label(self, textvariable=self.length_var, foreground="#555").grid(row=2, column=3, sticky="w", **pad)
+
+        self.z_len_label = ttk.Label(self, text="Z-DNA helix length:")
+        self.z_len_var = tk.StringVar(value="")
+        self.z_len_entry = ttk.Entry(self, textvariable=self.z_len_var, width=22, state="disabled")
+        self.z_hint = ttk.Label(
+            self,
+            text="Z-DNA fiber has a fixed sequence; the Sequence field and DSSR parameter table are ignored.",
+            foreground="#666",
+            wraplength=460,
+        )
+        self.z_len_label.grid(row=3, column=0, sticky="e", **pad)
+        self.z_len_entry.grid(row=3, column=1, sticky="w", **pad)
+        self.z_hint.grid(row=3, column=2, columnspan=2, sticky="w", **pad)
+        self.z_len_label.grid_remove()
+        self.z_len_entry.grid_remove()
+        self.z_hint.grid_remove()
+
+        ttk.Label(self, text="Helix name (optional):").grid(row=4, column=0, sticky="e", **pad)
+        self.name_var = tk.StringVar(value="")
+        self.name_entry = ttk.Entry(self, textvariable=self.name_var)
+        self.name_entry.grid(row=4, column=1, columnspan=2, sticky="we", **pad)
+
+        ttk.Label(self, text="Output folder:").grid(row=5, column=0, sticky="e", **pad)
+        self.output_dir_var = tk.StringVar(value=_path_text(DEFAULT_OUTPUT_DIR))
+        self.output_dir_entry = ttk.Entry(self, textvariable=self.output_dir_var)
+        self.output_dir_entry.grid(row=5, column=1, sticky="we", **pad)
+        ttk.Button(self, text="Browse", command=self.browse_output_dir).grid(row=5, column=2, sticky="w", **pad)
+
+        type_frame = ttk.LabelFrame(self, text="Nucleic acid type")
+        type_frame.grid(row=6, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        self.na_type_var = tk.StringVar(value="B-DNA")
+        for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
+            ttk.Radiobutton(
+                type_frame,
+                text=label,
+                value=label,
+                variable=self.na_type_var,
+                command=self.on_type_changed,
+            ).grid(row=0, column=idx, padx=8, pady=4, sticky="w")
+
+        self.custom_btn = ttk.Button(
+            self,
+            text="Customize DSSR parameters",
+            command=self.open_param_dialog,
+        )
+        self.custom_btn.grid(row=7, column=0, sticky="e", **pad)
+        self.param_values_var = tk.StringVar(value="")
+        self.param_values_lbl = ttk.Label(
+            self,
+            textvariable=self.param_values_var,
+            foreground="#555",
+            justify="left",
+            wraplength=860,
+        )
+        self.param_values_lbl.grid(row=7, column=1, columnspan=3, sticky="w", **pad)
+
+        self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization")
+        self.min_frame.grid(row=8, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        self.min_frame.grid_columnconfigure(1, weight=1)
+        self.minimize_var = tk.BooleanVar(value=DEFAULT_MINIMIZE_BY_TYPE["B-DNA"])
+        self.min_check = ttk.Checkbutton(
+            self.min_frame,
+            text="Run phenix.geometry_minimization",
+            variable=self.minimize_var,
+            command=self._on_minimize_toggled,
+        )
+        self.min_check.grid(row=0, column=0, sticky="w", padx=8, pady=6)
+        ttk.Label(self.min_frame, text="Params file (.eff / .params):").grid(row=0, column=1, sticky="e", padx=8, pady=6)
+        self.params_var = tk.StringVar(value=_path_text(DEFAULT_PARAMS_FILE))
+        self.params_entry = ttk.Entry(self.min_frame, textvariable=self.params_var)
+        self.params_entry.grid(row=0, column=2, sticky="we", padx=8, pady=6)
+        self.min_frame.grid_columnconfigure(2, weight=1)
+        self.params_browse_btn = ttk.Button(self.min_frame, text="Browse", command=self.browse_params)
+        self.params_browse_btn.grid(row=0, column=3, sticky="w", padx=8, pady=6)
+        self.min_hint_var = tk.StringVar(value="")
+        ttk.Label(self.min_frame, textvariable=self.min_hint_var, foreground="#666", wraplength=960).grid(
+            row=1, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6)
+        )
+
+        options_row = ttk.Frame(self)
+        options_row.grid(row=9, column=0, columnspan=4, sticky="w", padx=12, pady=(0, 6))
+        self.deleteH_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            options_row,
+            text="Delete hydrogens from generated PDB",
+            variable=self.deleteH_var,
+        ).pack(side="left", padx=8)
+
+        place = ttk.LabelFrame(self, text="Placement / Orientation")
+        place.grid(row=10, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
+            place.grid_columnconfigure(col, minsize=minsize)
+        place.grid_columnconfigure(7, weight=1)
+
+        self.x_var = tk.DoubleVar(value=0.0)
+        self.y_var = tk.DoubleVar(value=0.0)
+        self.z_var = tk.DoubleVar(value=0.0)
+        self.roll_var = tk.DoubleVar(value=0.0)
+        self.phi_var = tk.DoubleVar(value=0.0)
+        self.theta_var = tk.DoubleVar(value=0.0)
+        self.delta_z_var = tk.DoubleVar(value=0.0)
+
+        ttk.Label(place, text="delta_z (A)").grid(row=0, column=0, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.delta_z_var, width=10).grid(row=0, column=1, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="delta_z should be 0 for most cases.", foreground="#555").grid(
+            row=0, column=2, columnspan=4, sticky="w", padx=(20, 6), pady=5
+        )
+
+        ttk.Label(place, text="x (A)").grid(row=1, column=0, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.x_var, width=10).grid(row=1, column=1, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="y (A)").grid(row=1, column=2, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.y_var, width=10).grid(row=1, column=3, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="z (A)").grid(row=1, column=4, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.z_var, width=10).grid(row=1, column=5, sticky="w", padx=2, pady=5)
+
+        ttk.Label(place, text="roll (deg)").grid(row=2, column=0, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.roll_var, width=10).grid(row=2, column=1, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="phi (deg)").grid(row=2, column=2, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.phi_var, width=10).grid(row=2, column=3, sticky="w", padx=2, pady=5)
+        ttk.Label(place, text="theta (deg)").grid(row=2, column=4, sticky="e", padx=6, pady=5)
+        ttk.Entry(place, textvariable=self.theta_var, width=10).grid(row=2, column=5, sticky="w", padx=2, pady=5)
+
+        ttk.Label(
+            place,
+            text="For GIDEON: roll = roll at GIDEON - 111.25",
+            foreground="#555",
+            justify="left",
+            wraplength=420,
+        ).grid(row=3, column=0, columnspan=4, sticky="w", padx=(20, 6), pady=(0, 6))
+
+        self.info_var = tk.StringVar(value="")
+        ttk.Label(self, textvariable=self.info_var, wraplength=1120, foreground="#444", justify="left").grid(
+            row=11, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
+        )
+
+        log_frame = ttk.LabelFrame(self, text="Log output")
+        log_frame.grid(row=12, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
+        log_frame.grid_columnconfigure(0, weight=1)
+        log_frame.grid_rowconfigure(0, weight=1)
+        self.log_text = tk.Text(log_frame, wrap="none", height=12)
+        try:
+            self.log_text.configure(font=("Menlo", 10))
+        except Exception:
+            self.log_text.configure(font=("Courier", 10))
+        yscroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        xscroll = ttk.Scrollbar(log_frame, orient="horizontal", command=self.log_text.xview)
+        self.log_text.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        self.log_text.configure(state="disabled")
+
+        btn_row = ttk.Frame(self)
+        btn_row.grid(row=13, column=0, columnspan=4, sticky="e", padx=12, pady=(6, 12))
+        ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
+        self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
+        self.generate_btn.pack(side="left", padx=8)
+
+        self.seq_var.trace_add("write", lambda *_args: self._update_sequence_length())
+        self.z_len_var.trace_add("write", lambda *_args: self._update_sequence_length())
+        self.output_dir_var.trace_add("write", lambda *_args: self._refresh_info_text())
+
+        self.on_type_changed()
+        self._refresh_info_text()
+        self._set_log(f"=== {APP_NAME} {__version__} startup ===\nApp folder: {APP_DIR}\nHelper folder: {LIB_DIR}\n")
+        self.after(100, self.check_dssr_on_startup)
+
+    def _set_optional_window_icon(self) -> None:
+        if not DEFAULT_ICON_FILE.exists():
+            return
+        try:
+            self._window_icon = tk.PhotoImage(file=str(DEFAULT_ICON_FILE))
+            self.iconphoto(True, self._window_icon)
+        except tk.TclError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Log helpers
+    # ------------------------------------------------------------------
+    def _set_log(self, text: str) -> None:
+        self.log_text.configure(state="normal")
+        self.log_text.delete("1.0", "end")
+        self.log_text.insert("1.0", text)
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+        self.update_idletasks()
+
+    def _append_log(self, text: str) -> None:
+        self.log_text.configure(state="normal")
+        if self.log_text.index("end-1c") != "1.0":
+            self.log_text.insert("end", "\n")
+        self.log_text.insert("end", text)
+        self.log_text.see("end")
+        self.log_text.configure(state="disabled")
+        self.update_idletasks()
+
+    # ------------------------------------------------------------------
+    # Browse / state helpers
+    # ------------------------------------------------------------------
+    def browse_output_dir(self) -> None:
+        path = filedialog.askdirectory(title="Choose output folder", initialdir=self.output_dir_var.get() or str(APP_DIR))
+        if path:
+            self.output_dir_var.set(path)
+
+    def browse_params(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Choose phenix.geometry_minimization params file",
+            initialdir=str(DEFAULT_PARAMS_FILE.parent),
+            filetypes=[("Params/eff", "*.params *.eff"), ("All files", "*.*")],
+        )
+        if path:
+            self.params_var.set(path)
+
+    def _on_minimize_toggled(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        if na_type in self.minimize_by_type:
+            self.minimize_by_type[na_type] = bool(self.minimize_var.get())
+        self._refresh_minimization_hint()
+
+    def _refresh_minimization_hint(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        if na_type == "B-DNA":
+            self.min_hint_var.set("Default for B-DNA is to run phenix.geometry_minimization, matching the previous B-DNA workflow.")
+        elif na_type in ("A-DNA", "A-RNA"):
+            self.min_hint_var.set("Default for A-DNA/A-RNA is to skip minimization; check the box to run phenix.geometry_minimization.")
+        else:
+            self.min_hint_var.set("")
+
+    def _refresh_info_text(self) -> None:
+        out = self.output_dir_var.get().strip() or "<not selected>"
+        tmp = str(Path(out).expanduser() / "tmp_file") if out != "<not selected>" else "<not selected>"
+        self.info_var.set(
+            "Pipeline: build by selected type -> normalize names -> optional phenix.geometry_minimization "
+            "for B-DNA/A-DNA/A-RNA -> DSSR --more axis extraction -> align to +Z -> orient/place.\n"
+            f"Final placed PDB folder: {out}\n"
+            f"Intermediate files folder: {tmp}"
+        )
+
+    def _current_defaults(self):
+        return DEFAULT_PARAMS.get(self.na_type_var.get().strip())
+
+    def _current_param_store(self) -> Optional[Dict[str, str]]:
+        return self.param_values_by_type.get(self.na_type_var.get().strip())
+
+    def _refresh_param_values_display(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        defaults = self._current_defaults()
+        store = self._current_param_store()
+        if defaults is None or store is None:
+            self.param_values_var.set("Z-DNA uses DSSR fiber; the 12-parameter table is not used.")
+            return
+
+        parts = []
+        changed = []
+        for key, default in zip(PARAM_KEYS, defaults):
+            raw = store.get(key, "").strip()
+            value = raw if raw else f"{default:.4f}"
+            try:
+                numeric = float(value)
+                shown = f"{numeric:.4f}"
+                if raw and abs(numeric - float(default)) > 1e-10:
+                    changed.append(key)
+            except Exception:
+                shown = value
+            parts.append(f"{key}={shown}")
+        prefix = f"{na_type} DSSR table values: "
+        if changed:
+            prefix += "customized fields: " + ", ".join(changed) + ". "
+        else:
+            prefix += "default values. "
+        self.param_values_var.set(prefix + "    ".join(parts))
+
+    def _update_sequence_length(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        if na_type == "Z-DNA":
+            text = self.z_len_var.get().strip()
+            if not text:
+                self.length_var.set("Length: 0 bp")
+                return
+            try:
+                n = int(text)
+                if n <= 0 or n % 2 != 0:
+                    self.length_var.set("Length: invalid Z-DNA length")
+                else:
+                    self.length_var.set(f"Length: {n} bp; Z-DNA repeat = {n // 2}")
+            except Exception:
+                self.length_var.set("Length: invalid Z-DNA length")
+            return
+
+        seq_text = self.seq_var.get().strip()
+        if not seq_text:
+            self.length_var.set("Length: 0 bp")
+            return
+        try:
+            seq = expand_sequence(seq_text, alphabet=sequence_alphabet(na_type))
+            self.length_var.set(f"Length: {len(seq)} bp")
+        except Exception as exc:
+            self.length_var.set(f"Length: invalid sequence ({exc})")
+
+    def open_param_dialog(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        defaults = self._current_defaults()
+        store = self._current_param_store()
+        if defaults is None or store is None:
+            messagebox.showinfo("Z-DNA", "Z-DNA uses DSSR fiber; the 12-parameter table is not used.", parent=self)
+            return
+
+        win = tk.Toplevel(self)
+        win.title(f"Customize DSSR parameters — {na_type}")
+        win.geometry("800x500+180+120")
+        win.minsize(700, 430)
+        win.transient(self)
+        win.grab_set()
+
+        ttk.Label(
+            win,
+            text=(
+                "Default values are filled automatically when no previous value exists. "
+                "Previously saved values are kept. Values are written to four digits after the decimal."
+            ),
+            wraplength=740,
+            foreground="#555",
+            justify="left",
+        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=14, pady=(14, 8))
+
+        local_vars: Dict[str, tk.StringVar] = {}
+        for idx, (key, default) in enumerate(zip(PARAM_KEYS, defaults)):
+            col_group = 0 if idx < 6 else 2
+            row = idx + 1 if idx < 6 else idx - 5
+            ttk.Label(win, text=PARAM_LABELS.get(key, key) + ":").grid(
+                row=row, column=col_group, sticky="e", padx=10, pady=6
+            )
+            initial = store.get(key, "").strip() or f"{default:.4f}"
+            local_vars[key] = tk.StringVar(value=initial)
+            ttk.Entry(win, textvariable=local_vars[key], width=18).grid(
+                row=row, column=col_group + 1, sticky="w", padx=10, pady=6
+            )
+
+        btns = ttk.Frame(win)
+        btns.grid(row=8, column=0, columnspan=4, sticky="e", padx=12, pady=12)
+
+        def clear_all() -> None:
+            for key in PARAM_KEYS:
+                local_vars[key].set("")
+
+        def restore_defaults() -> None:
+            for key, default in zip(PARAM_KEYS, defaults):
+                local_vars[key].set(f"{default:.4f}")
+
+        def save_close() -> None:
+            for key in PARAM_KEYS:
+                txt = local_vars[key].get().strip()
+                if txt:
+                    try:
+                        float(txt)
+                    except Exception:
+                        messagebox.showerror("Invalid value", f"{key} must be a number.", parent=win)
+                        return
+                store[key] = txt
+            self._refresh_param_values_display()
+            win.destroy()
+
+        ttk.Button(btns, text="Clear fields", command=clear_all).pack(side="left", padx=6)
+        ttk.Button(btns, text="Restore defaults", command=restore_defaults).pack(side="left", padx=6)
+        ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left", padx=6)
+        ttk.Button(btns, text="Save", command=save_close).pack(side="left", padx=6)
+
+    def _get_param_overrides(self) -> Dict[str, float]:
+        defaults = self._current_defaults()
+        store = self._current_param_store()
+        if defaults is None or store is None:
+            return {}
+        overrides: Dict[str, float] = {}
+        for key, default in zip(PARAM_KEYS, defaults):
+            txt = store.get(key, "").strip()
+            if txt:
+                try:
+                    value = float(txt)
+                except Exception as exc:
+                    raise ValueError(f"{key} must be a number.") from exc
+                if abs(value - float(default)) > 1e-10:
+                    overrides[key] = value
+        return overrides
+
+    def on_type_changed(self) -> None:
+        old_type = self._active_na_type
+        if old_type in self.minimize_by_type:
+            self.minimize_by_type[old_type] = bool(self.minimize_var.get())
+
+        na_type = self.na_type_var.get().strip()
+        if na_type == "Z-DNA":
+            self.seq_entry.configure(state="disabled")
+            self.custom_btn.configure(state="disabled")
+            self.z_len_label.grid()
+            self.z_len_entry.grid()
+            self.z_len_entry.configure(state="normal")
+            self.z_hint.grid()
+            self.min_frame.grid_remove()
+        else:
+            self.seq_entry.configure(state="normal")
+            self.custom_btn.configure(state="normal")
+            self.z_len_entry.configure(state="disabled")
+            self.z_len_label.grid_remove()
+            self.z_len_entry.grid_remove()
+            self.z_hint.grid_remove()
+            self.min_frame.grid()
+            self.minimize_var.set(self.minimize_by_type.get(na_type, False))
+            self._refresh_minimization_hint()
+
+        self._active_na_type = na_type
+        self._refresh_param_values_display()
+        self._update_sequence_length()
+        self._refresh_info_text()
+
+    def check_dssr_on_startup(self) -> None:
+        info = check_dssr_installation()
+        if info.get("installed"):
+            status = f"x3dna-dssr: FOUND — {info.get('executable')}"
+        else:
+            status = "x3dna-dssr: NOT FOUND"
+        self.dssr_status_var.set(status)
+
+        report = [
+            "=== x3dna-dssr startup check ===",
+            f"Installed : {info.get('installed')}",
+            f"Executable: {info.get('executable')}",
+            f"Command   : {info.get('command')}",
+            f"Returncode: {info.get('returncode')}",
+            "Output:",
+            str(info.get("output") or ""),
+        ]
+        self._append_log("\n".join(report))
+
+    # ------------------------------------------------------------------
+    # Build/generate
+    # ------------------------------------------------------------------
+    def _validate_params_for_minimization(self, run_phenix: bool) -> Optional[str]:
+        if not run_phenix:
+            return None
+        params = self.params_var.get().strip()
+        if not params:
+            raise ValueError("Please specify a params file for phenix.geometry_minimization.")
+        path = Path(params).expanduser()
+        if not path.is_absolute():
+            path = path.resolve()
+        if not path.exists():
+            raise ValueError(f"Params file not found: {path}")
+        return str(path)
+
+    def on_generate(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        try:
+            param_overrides = self._get_param_overrides()
+            output_dir, tmp_dir = _ensure_output_dirs(self.output_dir_var.get())
+        except Exception as exc:
+            messagebox.showerror("Input error", str(exc), parent=self)
+            return
+
+        user_name = sanitize_basename(self.name_var.get().strip())
+        deleteH = bool(self.deleteH_var.get())
+        run_phenix = bool(self.minimize_var.get()) if na_type != "Z-DNA" else False
+
+        try:
+            params_for_min = self._validate_params_for_minimization(run_phenix)
+        except Exception as exc:
+            messagebox.showerror("phenix.geometry_minimization", str(exc), parent=self)
+            return
+
+        self.generate_btn.configure(state="disabled")
+        self._set_log(
+            f"=== {APP_NAME} {__version__} job started ===\n"
+            f"Type: {na_type}\n"
+            f"Output folder: {output_dir}\n"
+            f"Intermediate folder: {tmp_dir}\n"
+            f"phenix.geometry_minimization: {'ON' if run_phenix else 'OFF'}\n"
+            f"Delete hydrogens: {deleteH}\n"
+        )
+
+        try:
+            if na_type == "B-DNA":
+                seq_in = self.seq_var.get().strip()
+                if not seq_in:
+                    raise ValueError("Please enter a DNA sequence using A/T/C/G.")
+                result = build_bdna(
+                    seq_in,
+                    user_name,
+                    params_for_min,
+                    tmp_dir,
+                    param_overrides=param_overrides,
+                    deleteH=deleteH,
+                    run_phenix=run_phenix,
+                )
+
+            elif na_type == "A-DNA":
+                seq_in = self.seq_var.get().strip()
+                if not seq_in:
+                    raise ValueError("Please enter a DNA sequence using A/T/C/G.")
+                result = build_adna(
+                    seq_in,
+                    user_name,
+                    tmp_dir,
+                    param_overrides=param_overrides,
+                    deleteH=deleteH,
+                    run_phenix=run_phenix,
+                    params_file=params_for_min,
+                )
+
+            elif na_type == "A-RNA":
+                seq_in = self.seq_var.get().strip()
+                if not seq_in:
+                    raise ValueError("Please enter an RNA sequence using A/U/C/G.")
+                result = build_arna(
+                    seq_in,
+                    user_name,
+                    tmp_dir,
+                    param_overrides=param_overrides,
+                    deleteH=deleteH,
+                    run_phenix=run_phenix,
+                    params_file=params_for_min,
+                )
+
+            elif na_type == "Z-DNA":
+                try:
+                    length_value = int(self.z_len_var.get().strip())
+                except Exception as exc:
+                    raise ValueError("Z-DNA helix length must be a positive even integer.") from exc
+                result = build_zdna(length_value, user_name, tmp_dir, deleteH=deleteH)
+
+            else:
+                raise ValueError(f"Unsupported type: {na_type}")
+
+            aligned_pdb = Path(str(result["pdb_aligned"]))
+            placed_pdb = _final_placed_path(output_dir, str(result.get("base_name", "bnp_na_helix")))
+            place_result = place_after_Z(
+                str(aligned_pdb),
+                str(placed_pdb),
+                roll_deg=self.roll_var.get(),
+                phi_deg=self.phi_var.get(),
+                theta_deg=self.theta_var.get(),
+                tx=self.x_var.get(),
+                ty=self.y_var.get(),
+                tz=self.z_var.get(),
+                delta_z=self.delta_z_var.get(),
+            )
+
+            log_parts = [
+                f"=== {APP_NAME} {__version__} job summary ===",
+                f"Final placed PDB: {placed_pdb}",
+                f"Intermediate files: {tmp_dir}",
+                f"Length: {result.get('length')} bp",
+                "",
+                str(result.get("log_text", "")),
+            ]
+            if param_overrides and na_type != "Z-DNA":
+                log_parts += [
+                    "",
+                    "=== GUI parameter overrides applied ===",
+                    ", ".join(f"{key}={value:.4f}" for key, value in param_overrides.items()),
+                ]
+            log_parts += ["", str(place_result.get("log_text", ""))]
+            self._set_log("\n".join(log_parts))
+            messagebox.showinfo("bnp_na complete", f"Final placed PDB:\n{placed_pdb}", parent=self)
+
+        except (PipelineError, PlacerError) as exc:
+            self._set_log(getattr(exc, "log_text", "") or str(exc))
+            messagebox.showerror("Job failed", str(exc), parent=self)
+        except Exception as exc:
+            self._set_log(f"Unexpected error:\n{type(exc).__name__}: {exc}")
+            messagebox.showerror("Unexpected error", str(exc), parent=self)
+        finally:
+            self.generate_btn.configure(state="normal")
+
+
+def main(argv: Optional[list[str]] = None) -> None:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "-v" in args or "--version" in args:
+        print(f"{APP_NAME} {__version__}")
+        return
+    app = App()
+    app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

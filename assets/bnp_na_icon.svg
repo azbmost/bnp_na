@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">bnp_na icon</title>
+  <desc id="desc">A stylized nucleic acid helix aligned inside a square app icon.</desc>
+  <defs>
+    <linearGradient id="background" x1="72" y1="52" x2="440" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10233f"/>
+      <stop offset="0.55" stop-color="#1b5d6a"/>
+      <stop offset="1" stop-color="#2d7a54"/>
+    </linearGradient>
+    <linearGradient id="strandA" x1="116" y1="88" x2="392" y2="424" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#90e0ef"/>
+      <stop offset="1" stop-color="#f5f871"/>
+    </linearGradient>
+    <linearGradient id="strandB" x1="120" y1="424" x2="396" y2="88" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb703"/>
+      <stop offset="1" stop-color="#80ed99"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#07111f" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="88" fill="url(#background)"/>
+  <circle cx="124" cy="104" r="54" fill="#ffffff" opacity="0.08"/>
+  <circle cx="414" cy="408" r="72" fill="#ffffff" opacity="0.07"/>
+  <g filter="url(#softShadow)">
+    <path d="M170 70 C330 130 330 202 170 256 C330 310 330 382 170 442" fill="none" stroke="url(#strandA)" stroke-width="30" stroke-linecap="round"/>
+    <path d="M342 70 C182 130 182 202 342 256 C182 310 182 382 342 442" fill="none" stroke="url(#strandB)" stroke-width="30" stroke-linecap="round"/>
+    <g stroke="#e9fbff" stroke-width="18" stroke-linecap="round" opacity="0.92">
+      <path d="M209 116 L303 116"/>
+      <path d="M184 186 L328 186"/>
+      <path d="M172 256 L340 256"/>
+      <path d="M184 326 L328 326"/>
+      <path d="M209 396 L303 396"/>
+    </g>
+    <g fill="#f8fbff">
+      <circle cx="170" cy="70" r="20"/>
+      <circle cx="342" cy="70" r="20"/>
+      <circle cx="170" cy="256" r="20"/>
+      <circle cx="342" cy="256" r="20"/>
+      <circle cx="170" cy="442" r="20"/>
+      <circle cx="342" cy="442" r="20"/>
+    </g>
+  </g>
+</svg>

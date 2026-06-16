@@ -1,0 +1,7 @@
+pdb_interpretation {
+    link_distance_cutoff = 7.0
+}
+selection = name " P " or name " OP1" or name " OP2" or name " O5'" or name " C5'" or name " O3'" or name " O1P" or name " O2P"
+
+# The above can move
+# O1P and O2P are old conventions
