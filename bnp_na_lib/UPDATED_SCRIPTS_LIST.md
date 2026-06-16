@@ -1,8 +1,9 @@
-# bnp_na V13.4 updated folder
+# bnp_na V13.5 updated folder
 
 Top-level app folder contains only:
 
 - `bnp_na.py` — main GUI/controller and `-v` / `--version` entry point.
+- `CHANGELOG.md` — public version-by-version change log.
 - `bnp_na_lib/` — helper modules and support files.
 
 ## Helper folder: `bnp_na_lib/`
@@ -13,7 +14,7 @@ Top-level app folder contains only:
 - `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=A-RNA --par-type=heli`; optional phenix.geometry_minimization.
 - `build_zdna.py` — Z-DNA builder using DSSR fiber; no phenix.geometry_minimization option.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
-- `angle_helical_axisV2.py` — helical-axis radial-angle calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
+- `angle_helical_axisV2_1.py` — helical-axis radial-angle calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `geometry_utils.py` — shared rotation/vector helpers.
 - `na_placer.py` — final orient/place transformation after +Z alignment.
 - `pdb_inv_rotV2.py` — optional inversion/reflection helper for mirror-image L-form models after align-to-Z and before final placement.
@@ -23,7 +24,7 @@ Top-level app folder contains only:
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
 
-## V13.4 GUI changes
+## V13.5 changes
 
 1. Log output is embedded in the main GUI.
 2. Startup immediately checks `x3dna-dssr` and prints the executable/version/help output into the embedded log.
@@ -31,8 +32,10 @@ Top-level app folder contains only:
 4. Output folder is user-selectable. Final placed PDB is written to the selected folder; intermediate files are written to `<selected folder>/tmp_file/`.
 5. B-DNA, A-DNA, and A-RNA have a `phenix.geometry_minimization` checkbox and params-file field. Z-DNA does not provide this option.
 6. GUI text uses `GIDEON` in all capitals.
-7. Version is `bnp_na V13.4`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+7. Version is `bnp_na V13.5`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
 8. Sequence length is updated in the GUI after sequence input changes.
 9. Optional mirror-image L-form generation is available after align-to-Z and before final orient/place, using `pdb_inv_rotV2.py` i-mode and o-mode operations.
-10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2.py`.
-11. An XYZ axes BILD writer is available from the main GUI and can also be run directly as `bnp_na_lib/xyz_bild.py`.
+10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2_1.py`.
+11. The helical-axis angle tool filename now indicates the incorporated V2.1 script version; earlier public versions used `angle_helical_axisV2.py`.
+12. The helical-axis angle tool includes an axis drawing margin control and explanatory BILD `.comment` records.
+13. An XYZ axes BILD writer is available from the main GUI and can also be run directly as `bnp_na_lib/xyz_bild.py`.

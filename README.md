@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file.
 
-The current app version is `V13.4`.
+The current app version is `V13.5`.
 
 ## What It Does
 
@@ -54,6 +54,8 @@ Print the version without opening the GUI:
 ```bash
 python3 bnp_na.py --version
 ```
+
+See `CHANGELOG.md` for the version-by-version change log.
 
 ## Pull Updates
 
@@ -351,7 +353,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.4 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.5 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -376,7 +378,9 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 ## Helical-Axis Angle Tool
 
-`bnp_na` V13.4 includes `bnp_na_lib/angle_helical_axisV2.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+`bnp_na` V13.5 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+
+The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script update. Earlier public versions used `angle_helical_axisV2.py`. V13.5 adds an adjustable axis drawing margin and more explanatory `.comment` records in the generated BILD file.
 
 In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
 
@@ -389,8 +393,8 @@ This opens the angle tool in a separate window.
 You can also launch it directly:
 
 ```bash
-python3 bnp_na_lib/angle_helical_axisV2.py
-python3 bnp_na_lib/angle_helical_axisV2.py --gui
+python3 bnp_na_lib/angle_helical_axisV2_1.py
+python3 bnp_na_lib/angle_helical_axisV2_1.py --gui
 ```
 
 ### Axis Definition
@@ -435,7 +439,7 @@ This means custom-axis mode with XYZ points can also be used as a small geometry
 Fit axis from PDB and use atom points:
 
 ```bash
-python3 bnp_na_lib/angle_helical_axisV2.py -i helix.pdb \
+python3 bnp_na_lib/angle_helical_axisV2_1.py -i helix.pdb \
   --point1 "A:5:C1*" \
   --point2 "B:18:C1*"
 ```
@@ -443,7 +447,7 @@ python3 bnp_na_lib/angle_helical_axisV2.py -i helix.pdb \
 Use a custom axis and XYZ points without a PDB:
 
 ```bash
-python3 bnp_na_lib/angle_helical_axisV2.py \
+python3 bnp_na_lib/angle_helical_axisV2_1.py \
   --axis-point "0 0 0" --axis-vector "0 0 1" \
   --point1 "1 0 0" --point2 "0 1 0" \
   -o custom_axis_vectors.bild
@@ -452,10 +456,20 @@ python3 bnp_na_lib/angle_helical_axisV2.py \
 Use a custom axis and atom points from a PDB:
 
 ```bash
-python3 bnp_na_lib/angle_helical_axisV2.py -i helix.pdb \
+python3 bnp_na_lib/angle_helical_axisV2_1.py -i helix.pdb \
   --axis-point "0 0 0" --axis-vector "0 0 1" \
   --point1 "A:5:C1*" --point2 "B:18:C1*" \
   -o helix_custom_axis_vectors.bild
+```
+
+Use a longer displayed axis arrow in the BILD drawing:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2_1.py \
+  --axis-point "0 0 0" --axis-vector "0 0 1" \
+  --point1 "1 0 0" --point2 "0 1 0" \
+  --axis-margin 12 \
+  -o longer_axis_vectors.bild
 ```
 
 ### BILD Output
@@ -467,6 +481,8 @@ The tool writes Chimera/ChimeraX `.bild` files using `.comment`, `.color`, `.arr
 - Spheres at the two points.
 - Spheres at the two point projections onto the axis.
 
+The BILD file also includes `.comment` records immediately before the axis arrow, radial-vector arrows, point-marker spheres, and projection-marker spheres. These comments make the file easier to inspect or modify by hand.
+
 Typical visualization workflow:
 
 1. Open the PDB in Chimera or ChimeraX.
@@ -475,16 +491,19 @@ Typical visualization workflow:
 Default drawing sizes are:
 
 ```text
+--axis-margin 5.0
 --axis-radius 1.0
 --vector-radius 1.0
 --sphere-radius 1.25
 ```
 
+`--axis-margin` is in Angstrom. It controls how far the displayed axis arrow extends beyond the selected fitted range or the two custom-axis reference points. It changes only the BILD drawing length, not the fitted axis, custom axis, radial vectors, or reported angle. Increase it when the axis arrow looks too short in Chimera/ChimeraX; decrease it when the arrow visually dominates a small local measurement.
+
 The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html>.
 
 ## XYZ Axes BILD Tool
 
-`bnp_na` V13.4 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
+`bnp_na` V13.5 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
 
 - A sphere at the origin.
 - A red X-axis arrow.
@@ -669,8 +688,9 @@ The GUI checks for `assets/bnp_na_icon.png` at startup and continues normally if
 
 ```text
 bnp_na.py                  Main GUI/controller
+CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
-bnp_na_lib/angle_helical_axisV2.py Helical-axis radial-angle calculator and BILD writer
+bnp_na_lib/angle_helical_axisV2_1.py Helical-axis radial-angle calculator and BILD writer
 bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
 bnp_na_lib/xyz_bild.py      Coordinate-axis BILD writer
