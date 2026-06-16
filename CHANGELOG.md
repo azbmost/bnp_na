@@ -6,7 +6,8 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 
 - Refined the main GUI typography: the sequence input label is no longer bold, while functional module titles use bold label-frame headings.
 - Updated the mirror-image chirality module title to `Mirror-image L-form chirality (L-DNA)`.
-- Replaced the one-line current helical-parameter display with a compact table showing parameter names, values, and default/custom source status.
+- Replaced the one-line current helical-parameter display with a compact three-row horizontal table showing current values, defaults, and default/custom source status.
+- Added default-value labels beside every helical-parameter entry in the customization dialog.
 
 ## V13.5
 

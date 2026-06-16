@@ -261,21 +261,17 @@ class App(tk.Tk):
 
         self.param_table = ttk.Treeview(
             self.param_frame,
-            columns=("param_a", "value_a", "source_a", "param_b", "value_b", "source_b"),
+            columns=("row_label", *PARAM_KEYS),
             show="headings",
-            height=6,
+            height=3,
             selectmode="none",
         )
-        for column, heading, width, anchor in (
-            ("param_a", "Parameter", 110, "w"),
-            ("value_a", "Value", 90, "e"),
-            ("source_a", "Source", 90, "center"),
-            ("param_b", "Parameter", 110, "w"),
-            ("value_b", "Value", 90, "e"),
-            ("source_b", "Source", 90, "center"),
-        ):
+        for column, heading, width, anchor in (("row_label", "", 72, "w"),):
             self.param_table.heading(column, text=heading)
-            self.param_table.column(column, width=width, anchor=anchor, stretch=True)
+            self.param_table.column(column, width=width, anchor=anchor, stretch=False)
+        for key in PARAM_KEYS:
+            self.param_table.heading(key, text=PARAM_LABELS.get(key, key))
+            self.param_table.column(key, width=80, anchor="center", stretch=True)
         self.param_table.grid(row=1, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 8))
 
         self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization", style="Bold.TLabelframe")
@@ -712,6 +708,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         self.param_table.grid()
         self.param_table.delete(*self.param_table.get_children())
         changed = []
+        current_values = []
+        default_values = []
+        sources = []
 
         def shown_value_and_source(key: str, default: float) -> Tuple[str, str]:
             raw = store.get(key, "").strip()
@@ -731,26 +730,15 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     changed.append(key)
             return shown, source
 
-        for left, left_default, right, right_default in zip(
-            PARAM_KEYS[:6],
-            defaults[:6],
-            PARAM_KEYS[6:],
-            defaults[6:],
-        ):
-            left_value, left_source = shown_value_and_source(left, left_default)
-            right_value, right_source = shown_value_and_source(right, right_default)
-            self.param_table.insert(
-                "",
-                "end",
-                values=(
-                    PARAM_LABELS.get(left, left),
-                    left_value,
-                    left_source,
-                    PARAM_LABELS.get(right, right),
-                    right_value,
-                    right_source,
-                ),
-            )
+        for key, default in zip(PARAM_KEYS, defaults):
+            value, source = shown_value_and_source(key, default)
+            current_values.append(value)
+            default_values.append(f"{float(default):.4f}")
+            sources.append(source)
+
+        self.param_table.insert("", "end", values=("Current", *current_values))
+        self.param_table.insert("", "end", values=("Default", *default_values))
+        self.param_table.insert("", "end", values=("Source", *sources))
 
         if changed:
             status = f"{na_type} table values; customized fields: {', '.join(changed)}."
@@ -795,37 +783,40 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         win = tk.Toplevel(self)
         win.title(f"Customize DSSR parameters — {na_type}")
-        win.geometry("800x500+180+120")
-        win.minsize(700, 430)
+        win.geometry("960x500+180+120")
+        win.minsize(860, 430)
         win.transient(self)
         win.grab_set()
 
         ttk.Label(
             win,
             text=(
-                "Default values are filled automatically when no previous value exists. "
-                "Previously saved values are kept. Values are written to four digits after the decimal."
+                "Leave a field blank to use the default value shown beside it. "
+                "Previously saved custom values are kept. Values are written to four digits after the decimal."
             ),
-            wraplength=740,
+            wraplength=900,
             foreground="#555",
             justify="left",
-        ).grid(row=0, column=0, columnspan=4, sticky="w", padx=14, pady=(14, 8))
+        ).grid(row=0, column=0, columnspan=6, sticky="w", padx=14, pady=(14, 8))
 
         local_vars: Dict[str, tk.StringVar] = {}
         for idx, (key, default) in enumerate(zip(PARAM_KEYS, defaults)):
-            col_group = 0 if idx < 6 else 2
+            col_group = 0 if idx < 6 else 3
             row = idx + 1 if idx < 6 else idx - 5
             ttk.Label(win, text=PARAM_LABELS.get(key, key) + ":").grid(
                 row=row, column=col_group, sticky="e", padx=10, pady=6
             )
-            initial = store.get(key, "").strip() or f"{default:.4f}"
+            initial = store.get(key, "").strip()
             local_vars[key] = tk.StringVar(value=initial)
             ttk.Entry(win, textvariable=local_vars[key], width=18).grid(
                 row=row, column=col_group + 1, sticky="w", padx=10, pady=6
             )
+            ttk.Label(win, text=f"default {default:.4f}", foreground="#666").grid(
+                row=row, column=col_group + 2, sticky="w", padx=(0, 12), pady=6
+            )
 
         btns = ttk.Frame(win)
-        btns.grid(row=8, column=0, columnspan=4, sticky="e", padx=12, pady=12)
+        btns.grid(row=8, column=0, columnspan=6, sticky="e", padx=12, pady=12)
 
         def clear_all() -> None:
             for key in PARAM_KEYS:
