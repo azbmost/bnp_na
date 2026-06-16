@@ -1,4 +1,4 @@
-# bnp_na V13.3 updated folder
+# bnp_na V13.4 updated folder
 
 Top-level app folder contains only:
 
@@ -18,11 +18,12 @@ Top-level app folder contains only:
 - `na_placer.py` — final orient/place transformation after +Z alignment.
 - `pdb_inv_rotV2.py` — optional inversion/reflection helper for mirror-image L-form models after align-to-Z and before final placement.
 - `pdb_name_standard.py` — nucleotide residue/atom-name normalization; changed from the previous script name `pdb_make_dna_v3_2.py`.
+- `xyz_bild.py` — coordinate-axis BILD writer with configurable arrow length and width.
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
 
-## V13.3 GUI changes
+## V13.4 GUI changes
 
 1. Log output is embedded in the main GUI.
 2. Startup immediately checks `x3dna-dssr` and prints the executable/version/help output into the embedded log.
@@ -30,7 +31,8 @@ Top-level app folder contains only:
 4. Output folder is user-selectable. Final placed PDB is written to the selected folder; intermediate files are written to `<selected folder>/tmp_file/`.
 5. B-DNA, A-DNA, and A-RNA have a `phenix.geometry_minimization` checkbox and params-file field. Z-DNA does not provide this option.
 6. GUI text uses `GIDEON` in all capitals.
-7. Version is `bnp_na V13.3`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+7. Version is `bnp_na V13.4`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
 8. Sequence length is updated in the GUI after sequence input changes.
 9. Optional mirror-image L-form generation is available after align-to-Z and before final orient/place, using `pdb_inv_rotV2.py` i-mode and o-mode operations.
 10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2.py`.
+11. An XYZ axes BILD writer is available from the main GUI and can also be run directly as `bnp_na_lib/xyz_bild.py`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.3: Building and placing nucleic acid helices.
+"""bnp_na V13.4: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.3"
+__version__ = "V13.4"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -34,6 +34,7 @@ from build_common import (  # noqa: E402
 from build_zdna import build_zdna  # noqa: E402
 from angle_helical_axisV2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
+from xyz_bild import write_xyz_bild  # noqa: E402
 from na_placer import PlacerError, place_after_Z  # noqa: E402
 
 
@@ -312,21 +313,8 @@ class App(tk.Tk):
         )
         self._refresh_invrot_state()
 
-        tools = ttk.LabelFrame(self, text="Analysis tools")
-        tools.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=6)
-        tools.grid_columnconfigure(1, weight=1)
-        ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
-            row=0, column=0, sticky="w", padx=8, pady=6
-        )
-        ttk.Label(
-            tools,
-            text="Measure the around-axis angle between two atom or XYZ points and write a Chimera/ChimeraX .bild file.",
-            foreground="#666",
-            wraplength=850,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
-
         place = ttk.LabelFrame(self, text="Placement / Orientation")
-        place.grid(row=12, column=0, columnspan=4, sticky="we", padx=12, pady=8)
+        place.grid(row=11, column=0, columnspan=4, sticky="we", padx=12, pady=8)
         for col, minsize in {0: 80, 1: 120, 2: 80, 3: 120, 4: 80, 5: 120}.items():
             place.grid_columnconfigure(col, minsize=minsize)
         place.grid_columnconfigure(7, weight=1)
@@ -369,8 +357,30 @@ class App(tk.Tk):
 
         self.info_var = tk.StringVar(value="")
         ttk.Label(self, textvariable=self.info_var, wraplength=1120, foreground="#444", justify="left").grid(
-            row=13, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
+            row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 6)
         )
+
+        tools = ttk.LabelFrame(self, text="Analysis tools")
+        tools.grid(row=13, column=0, columnspan=4, sticky="we", padx=12, pady=6)
+        tools.grid_columnconfigure(1, weight=1)
+        ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
+            row=0, column=0, sticky="w", padx=8, pady=6
+        )
+        ttk.Label(
+            tools,
+            text="Measure the around-axis angle between two atom or XYZ points and write a Chimera/ChimeraX .bild file.",
+            foreground="#666",
+            wraplength=850,
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=6)
+        ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
+            row=1, column=0, sticky="w", padx=8, pady=6
+        )
+        ttk.Label(
+            tools,
+            text="Create a red/yellow/blue coordinate-axis .bild helper with configurable arrow length and width.",
+            foreground="#666",
+            wraplength=850,
+        ).grid(row=1, column=1, sticky="w", padx=8, pady=6)
 
         log_frame = ttk.LabelFrame(self, text="Log output")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=8)
@@ -545,6 +555,95 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             launch_axis_angle_gui(parent=self)
         except Exception as exc:
             messagebox.showerror("Helical-axis angle tool", str(exc), parent=self)
+
+    def open_xyz_bild_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("Write XYZ axes BILD")
+        win.geometry("620x260+240+180")
+        win.minsize(560, 240)
+        win.transient(self)
+        win.grid_columnconfigure(1, weight=1)
+
+        try:
+            out_dir = Path(self.output_dir_var.get()).expanduser()
+            if not out_dir.is_absolute():
+                out_dir = out_dir.resolve()
+        except Exception:
+            out_dir = DEFAULT_OUTPUT_DIR
+
+        out_var = tk.StringVar(value=str(out_dir / "xyz_axes.bild"))
+        origin_var = tk.StringVar(value="0 0 0")
+        length_var = tk.StringVar(value="20")
+        width_var = tk.StringVar(value="1")
+        sphere_var = tk.StringVar(value="0.5")
+
+        def browse_out() -> None:
+            path = filedialog.asksaveasfilename(
+                title="Save XYZ axes BILD",
+                initialfile="xyz_axes.bild",
+                defaultextension=".bild",
+                filetypes=[("BILD files", "*.bild"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                out_var.set(path)
+
+        def parse_origin(text: str) -> Tuple[float, float, float]:
+            parts = text.replace(",", " ").split()
+            if len(parts) != 3:
+                raise ValueError("Origin must have three numbers, for example: 0 0 0")
+            return float(parts[0]), float(parts[1]), float(parts[2])
+
+        def write_file() -> None:
+            try:
+                out_path = Path(out_var.get()).expanduser()
+                if not str(out_path).strip():
+                    raise ValueError("Please choose an output .bild file.")
+                origin = parse_origin(origin_var.get())
+                length = float(length_var.get())
+                width = float(width_var.get())
+                sphere_radius = float(sphere_var.get())
+                written = write_xyz_bild(
+                    out_path,
+                    origin=origin,
+                    length=length,
+                    width=width,
+                    sphere_radius=sphere_radius,
+                )
+            except Exception as exc:
+                messagebox.showerror("XYZ axes BILD", str(exc), parent=win)
+                return
+            messagebox.showinfo("XYZ axes BILD", f"Wrote:\n{written}", parent=win)
+            win.destroy()
+
+        pad = {"padx": 10, "pady": 6}
+        ttk.Label(win, text="Output .bild:").grid(row=0, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=out_var).grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_out).grid(row=0, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Origin x y z:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=origin_var, width=18).grid(row=1, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Arrow length:").grid(row=2, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=length_var, width=12).grid(row=2, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Arrow width:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=width_var, width=12).grid(row=3, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Origin sphere radius:").grid(row=4, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=sphere_var, width=12).grid(row=4, column=1, sticky="w", **pad)
+
+        ttk.Label(
+            win,
+            text="Colors: X red, Y yellow, Z blue. Arrow head radius is 2.5 x arrow width.",
+            foreground="#666",
+            wraplength=460,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=10, pady=(4, 8))
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=(4, 10))
+        ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Write", command=write_file).pack(side="left", padx=6)
 
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"

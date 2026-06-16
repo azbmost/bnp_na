@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file.
 
-The current app version is `V13.3`.
+The current app version is `V13.4`.
 
 ## What It Does
 
@@ -14,6 +14,7 @@ The current app version is `V13.3`.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
+- Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
 - Writes final PDB files to the selected output folder and intermediate files to `<output folder>/tmp_file/`.
 
@@ -350,7 +351,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.3 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.4 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -375,9 +376,9 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 ## Helical-Axis Angle Tool
 
-`bnp_na` V13.3 includes `bnp_na_lib/angle_helical_axisV2.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+`bnp_na` V13.4 includes `bnp_na_lib/angle_helical_axisV2.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
 
-In the main `bnp_na` GUI, click:
+In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
 
 ```text
 Open helical-axis angle tool
@@ -480,6 +481,50 @@ Default drawing sizes are:
 ```
 
 The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html>.
+
+## XYZ Axes BILD Tool
+
+`bnp_na` V13.4 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
+
+- A sphere at the origin.
+- A red X-axis arrow.
+- A yellow Y-axis arrow.
+- A blue Z-axis arrow.
+
+In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
+
+```text
+Write XYZ axes BILD
+```
+
+The dialog lets you choose the output file and set:
+
+- `Origin x y z`, default `0 0 0`.
+- `Arrow length`, default `20`.
+- `Arrow width`, default `1`.
+- `Origin sphere radius`, default `0.5`.
+
+The arrow width is used as the BILD arrow shaft radius. The arrow head radius is `2.5 x arrow width`.
+
+The default output is equivalent to this BILD geometry, with explicit arrow-width parameters added:
+
+```text
+.sphere 0 0 0 0.5
+.color 1 0 0
+.arrow 0 0 0 20 0 0
+.color 1 1 0
+.arrow 0 0 0 0 20 0
+.color 0 0 1
+.arrow 0 0 0 0 0 20
+```
+
+You can also run it directly:
+
+```bash
+python3 bnp_na_lib/xyz_bild.py -o xyz_axes.bild
+python3 bnp_na_lib/xyz_bild.py -o xyz_axes.bild --length 30 --width 0.75
+python3 bnp_na_lib/xyz_bild.py -o shifted_axes.bild --origin "10 0 0" --length 15 --width 0.5
+```
 
 ## Delete Hydrogens
 
@@ -628,6 +673,7 @@ bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/angle_helical_axisV2.py Helical-axis radial-angle calculator and BILD writer
 bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
+bnp_na_lib/xyz_bild.py      Coordinate-axis BILD writer
 bnp_na_lib/min_P_C5.params Default Phenix minimization params file
 assets/                    Optional app/taskbar icon assets
 requirements.txt           Python package dependency list
