@@ -184,6 +184,16 @@ X-disp, Y-disp, h-Rise, Incl., Tip, h-Twist
 
 The first six values are local base-pair parameters. The last six values are local helical-step parameters. In the generated DSSR table, the last row uses `999999` for the helical-step values because there is no next base pair after the final row.
 
+Built-in default values:
+
+| NA type | Shear | Stretch | Stagger | Buckle | Propeller | Opening | X-disp | Y-disp | h-Rise | Incl. | Tip | h-Twist |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| B-DNA | 0.0000 | -0.1500 | 0.0900 | 0.5000 | -11.4000 | 0.6000 | 0.0500 | 0.0200 | 3.4000 | 2.1000 | 0.0000 | 34.2857 |
+| A-DNA | 0.0001 | -0.1448 | 0.0638 | 0.0003 | -10.5158 | -1.8170 | -4.4616 | 0.0001 | 2.5466 | 22.6460 | 0.0001 | 32.7273 |
+| A-RNA | 0.0137 | -0.0848 | 0.0126 | -0.0044 | -2.0765 | -1.6676 | -4.0513 | 0.0678 | 2.8120 | 15.5148 | 0.7866 | 32.7273 |
+
+Translational parameters are in Angstrom. Angular parameters are in degrees. The app writes these values to the DSSR helical table with four digits after the decimal. If a field is left empty in the customization dialog, the corresponding default above is used.
+
 Buttons in the parameter dialog:
 
 - `Save` stores the current values for the selected nucleic-acid type.
@@ -209,6 +219,17 @@ The params file defaults to:
 ```text
 bnp_na_lib/min_P_C5.params
 ```
+
+The bundled default params file is intentionally small:
+
+```text
+pdb_interpretation {
+    link_distance_cutoff = 7.0
+}
+selection = name " P " or name " OP1" or name " OP2" or name " O5'" or name " C5'" or name " O3'" or name " O1P" or name " O2P"
+```
+
+The `link_distance_cutoff = 7.0` line relaxes the bond/link-distance interpretation threshold used by Phenix while reading the generated nucleic-acid PDB. The `selection` line targets phosphate and nearby sugar-backbone atoms for the geometry-minimization run: `P`, `OP1`, `OP2`, `O5'`, `C5'`, and `O3'`. It also includes old phosphate atom names `O1P` and `O2P`, in case a generated or imported PDB still uses that convention.
 
 When minimization is enabled, the app copies the params file into the intermediate output folder and runs Phenix there. The aligned input becomes the minimized PDB instead of the normalized PDB.
 
