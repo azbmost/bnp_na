@@ -81,6 +81,8 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 
 ## GUI Field Guide
 
+Numeric GUI fields for DSSR helical parameters, Z-DNA helix length, placement/orientation, and the XYZ axes BILD helper accept either plain numbers or simple arithmetic expressions such as `360/10.5`, `6*4`, or `(20+10)/2`. Blank DSSR helical-parameter fields use the displayed default value.
+
 ### x3dna-dssr Status
 
 At startup, the GUI checks whether `x3dna-dssr` can be found. If it reports `FOUND`, the log also records the executable path and version/help output. If it reports `NOT FOUND`, install DSSR or add it to `PATH`.
@@ -196,7 +198,7 @@ Built-in default values:
 | A-DNA | 0.0001 | -0.1448 | 0.0638 | 0.0003 | -10.5158 | -1.8170 | -4.4616 | 0.0001 | 2.5466 | 22.6460 | 0.0001 | 32.7273 |
 | A-RNA | 0.0137 | -0.0848 | 0.0126 | -0.0044 | -2.0765 | -1.6676 | -4.0513 | 0.0678 | 2.8120 | 15.5148 | 0.7866 | 32.7273 |
 
-Translational parameters are in Angstrom. Angular parameters are in degrees. The app writes these values to the DSSR helical table with four digits after the decimal. If a field is left empty in the customization dialog, the corresponding default above is used.
+Translational parameters are in Å. Angular parameters are in °. The app writes these values to the DSSR helical table with four digits after the decimal. If a field is left empty in the customization dialog, the corresponding default above is used.
 
 Buttons in the parameter dialog:
 
@@ -518,10 +520,10 @@ Write XYZ axes BILD
 
 The dialog lets you choose the output file and set:
 
-- `Origin x y z`, default `0 0 0`.
-- `Arrow length`, default `20`.
-- `Arrow width`, default `1`.
-- `Origin sphere radius`, default `0.5`.
+- `Origin x y z (Å)`, default `0 0 0`.
+- `Arrow length (Å)`, default `20`.
+- `Arrow width (Å)`, default `1`.
+- `Origin sphere radius (Å)`, default `0.5`.
 
 The arrow width is used as the BILD arrow shaft radius. The arrow head radius is `2.5 x arrow width`.
 
@@ -557,8 +559,8 @@ Before final placement, the app aligns the generated helix so that its axis star
 
 Units:
 
-- `x`, `y`, `z`, and `delta_z` are in Angstrom.
-- `roll`, `phi`, and `theta` are in degrees.
+- `x`, `y`, `z`, and `delta_z` are in Å.
+- `roll`, `phi`, and `theta` are in °.
 
 Transform order:
 

@@ -9,6 +9,10 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 - Replaced the one-line current helical-parameter display with a compact three-row horizontal table showing current values, defaults, and default/custom source status.
 - Added default-value labels beside every helical-parameter entry in the customization dialog.
 - Reduced vertical padding between input rows and switched explanatory/status text to smaller GUI fonts to free more vertical space.
+- Updated the first-line GUI title to identify `bnp_na` as Module #1 of the AZBMOST package.
+- Added Tk app-name identity hints so task/menu labels can show `bnp_na` where the platform honors Tk application names.
+- Added Å/° units to GUI helical-parameter, placement, XYZ axes BILD controls, and placement logs.
+- Allowed simple arithmetic expressions such as `360/10.5` in numeric GUI fields for helical parameters, placement/orientation, Z-DNA length, and XYZ axes BILD settings.
 
 ## V13.5
 

@@ -92,9 +92,9 @@ def place_after_Z(
         "=== Orient/Place (after +Z alignment) ===",
         f"Input  : {in_path}",
         f"Output : {out_path}",
-        f"delta_z: {numeric['delta_z']} A",
-        f"roll/phi/theta (deg): {numeric['roll']}, {numeric['phi']}, {numeric['theta']}",
-        f"translate (A): ({numeric['tx']}, {numeric['ty']}, {numeric['tz']})",
+        f"delta_z: {numeric['delta_z']} Å",
+        f"roll/phi/theta (°): {numeric['roll']}, {numeric['phi']}, {numeric['theta']}",
+        f"translate (Å): ({numeric['tx']}, {numeric['ty']}, {numeric['tz']})",
     ]
 
     return {

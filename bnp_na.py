@@ -5,6 +5,8 @@ Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
 from __future__ import annotations
 
+import ast
+import math
 import re
 import sys
 import tkinter as tk
@@ -38,7 +40,7 @@ from xyz_bild import write_xyz_bild  # noqa: E402
 from na_placer import PlacerError, place_after_Z  # noqa: E402
 
 
-PARAM_LABELS = {
+PARAM_BASE_LABELS = {
     "Shear": "Shear",
     "Stretch": "Stretch",
     "Stagger": "Stagger",
@@ -52,6 +54,23 @@ PARAM_LABELS = {
     "Tip": "Tip",
     "h-Twist": "h-Twist",
 }
+PARAM_UNITS = {
+    "Shear": "Å",
+    "Stretch": "Å",
+    "Stagger": "Å",
+    "Buckle": "°",
+    "Propeller": "°",
+    "Opening": "°",
+    "X-disp": "Å",
+    "Y-disp": "Å",
+    "h-Rise": "Å",
+    "Incl.": "°",
+    "Tip": "°",
+    "h-Twist": "°",
+}
+PARAM_LABELS = {
+    key: f"{PARAM_BASE_LABELS.get(key, key)} ({PARAM_UNITS[key]})" for key in PARAM_BASE_LABELS
+}
 
 DEFAULT_PARAMS_FILE = LIB_DIR / "min_P_C5.params"
 DEFAULT_OUTPUT_DIR = APP_DIR / "output"
@@ -60,12 +79,72 @@ NA_TYPES_WITH_TABLE = ("B-DNA", "A-DNA", "A-RNA")
 DEFAULT_MINIMIZE_BY_TYPE = {"B-DNA": True, "A-DNA": False, "A-RNA": False}
 INV_ROT_OPERATIONS = ("oyz", "oxz", "oxy", "i", "ix", "iy", "iz", "ixy", "ixz", "iyz", "ixyz")
 
+_ARITHMETIC_BIN_OPS = {
+    ast.Add: lambda a, b: a + b,
+    ast.Sub: lambda a, b: a - b,
+    ast.Mult: lambda a, b: a * b,
+    ast.Div: lambda a, b: a / b,
+    ast.Pow: lambda a, b: a**b,
+    ast.Mod: lambda a, b: a % b,
+}
+_ARITHMETIC_UNARY_OPS = {
+    ast.UAdd: lambda a: a,
+    ast.USub: lambda a: -a,
+}
+
 
 def _path_text(path: Path) -> str:
     try:
         return str(path.resolve())
     except Exception:
         return str(path)
+
+
+def _eval_arithmetic_node(node: ast.AST) -> float:
+    if isinstance(node, ast.Expression):
+        return _eval_arithmetic_node(node.body)
+    if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+        return float(node.value)
+    if isinstance(node, ast.BinOp):
+        op_type = type(node.op)
+        if op_type not in _ARITHMETIC_BIN_OPS:
+            raise ValueError("unsupported operator")
+        left = _eval_arithmetic_node(node.left)
+        right = _eval_arithmetic_node(node.right)
+        return float(_ARITHMETIC_BIN_OPS[op_type](left, right))
+    if isinstance(node, ast.UnaryOp):
+        op_type = type(node.op)
+        if op_type not in _ARITHMETIC_UNARY_OPS:
+            raise ValueError("unsupported unary operator")
+        return float(_ARITHMETIC_UNARY_OPS[op_type](_eval_arithmetic_node(node.operand)))
+    raise ValueError("only numbers and +, -, *, /, %, **, and parentheses are allowed")
+
+
+def _parse_float_expression(text: str, field_name: str, *, default: Optional[float] = None) -> float:
+    expr = text.strip()
+    if not expr:
+        if default is not None:
+            return float(default)
+        raise ValueError(f"{field_name} is blank.")
+    try:
+        value = _eval_arithmetic_node(ast.parse(expr, mode="eval"))
+    except Exception as exc:
+        raise ValueError(f"{field_name} must be a number or simple arithmetic expression, for example 360/10.5.") from exc
+    if not math.isfinite(value):
+        raise ValueError(f"{field_name} must evaluate to a finite number.")
+    return float(value)
+
+
+def _parse_int_expression(text: str, field_name: str) -> int:
+    value = _parse_float_expression(text, field_name)
+    rounded = round(value)
+    if abs(value - rounded) > 1e-9:
+        raise ValueError(f"{field_name} must evaluate to an integer.")
+    return int(rounded)
+
+
+def _format_number(value: float) -> str:
+    return f"{float(value):.4f}"
 
 
 def _ensure_output_dirs(output_dir_text: str) -> Tuple[Path, Path]:
@@ -154,8 +233,9 @@ def _prepend_final_pdb_remarks(
 
 class App(tk.Tk):
     def __init__(self):
-        super().__init__()
-        self.title(f"{APP_NAME} {__version__} - Build and Place Nucleic Acid")
+        super().__init__(baseName=APP_NAME, className=APP_NAME)
+        self._set_app_identity()
+        self.title(f"{APP_NAME} {__version__} - AZBMOST Package Module #1 - Build and Place Nucleic Acid")
         self._set_optional_window_icon()
         self.geometry("1240x1080")
         self.minsize(1080, 920)
@@ -184,7 +264,7 @@ class App(tk.Tk):
 
         title = ttk.Label(
             self,
-            text=f"{APP_NAME} {__version__} — Building and placing nucleic acid",
+            text=f"{APP_NAME} {__version__} — Module #1 of AZBMOST package: building and placing nucleic acid",
             font=("Helvetica", 14, "bold"),
         )
         title.grid(row=0, column=0, columnspan=4, sticky="w", padx=12, pady=(10, 4))
@@ -354,32 +434,32 @@ class App(tk.Tk):
             place.grid_columnconfigure(col, minsize=minsize)
         place.grid_columnconfigure(7, weight=1)
 
-        self.x_var = tk.DoubleVar(value=0.0)
-        self.y_var = tk.DoubleVar(value=0.0)
-        self.z_var = tk.DoubleVar(value=0.0)
-        self.roll_var = tk.DoubleVar(value=0.0)
-        self.phi_var = tk.DoubleVar(value=0.0)
-        self.theta_var = tk.DoubleVar(value=0.0)
-        self.delta_z_var = tk.DoubleVar(value=0.0)
+        self.x_var = tk.StringVar(value="0")
+        self.y_var = tk.StringVar(value="0")
+        self.z_var = tk.StringVar(value="0")
+        self.roll_var = tk.StringVar(value="0")
+        self.phi_var = tk.StringVar(value="0")
+        self.theta_var = tk.StringVar(value="0")
+        self.delta_z_var = tk.StringVar(value="0")
 
-        ttk.Label(place, text="delta_z (A)").grid(row=0, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="delta_z (Å)").grid(row=0, column=0, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.delta_z_var, width=10).grid(row=0, column=1, sticky="w", padx=2, pady=inner_y)
         ttk.Label(place, text="delta_z should be 0 for most cases.", style="Status.TLabel").grid(
             row=0, column=2, columnspan=4, sticky="w", padx=(20, 6), pady=inner_y
         )
 
-        ttk.Label(place, text="x (A)").grid(row=1, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="x (Å)").grid(row=1, column=0, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.x_var, width=10).grid(row=1, column=1, sticky="w", padx=2, pady=inner_y)
-        ttk.Label(place, text="y (A)").grid(row=1, column=2, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="y (Å)").grid(row=1, column=2, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.y_var, width=10).grid(row=1, column=3, sticky="w", padx=2, pady=inner_y)
-        ttk.Label(place, text="z (A)").grid(row=1, column=4, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="z (Å)").grid(row=1, column=4, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.z_var, width=10).grid(row=1, column=5, sticky="w", padx=2, pady=inner_y)
 
-        ttk.Label(place, text="roll (deg)").grid(row=2, column=0, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="roll (°)").grid(row=2, column=0, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.roll_var, width=10).grid(row=2, column=1, sticky="w", padx=2, pady=inner_y)
-        ttk.Label(place, text="phi (deg)").grid(row=2, column=2, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="phi (°)").grid(row=2, column=2, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.phi_var, width=10).grid(row=2, column=3, sticky="w", padx=2, pady=inner_y)
-        ttk.Label(place, text="theta (deg)").grid(row=2, column=4, sticky="e", padx=6, pady=inner_y)
+        ttk.Label(place, text="theta (°)").grid(row=2, column=4, sticky="e", padx=6, pady=inner_y)
         ttk.Entry(place, textvariable=self.theta_var, width=10).grid(row=2, column=5, sticky="w", padx=2, pady=inner_y)
 
         ttk.Label(
@@ -456,6 +536,12 @@ class App(tk.Tk):
         try:
             self._window_icon = tk.PhotoImage(file=str(DEFAULT_ICON_FILE))
             self.iconphoto(True, self._window_icon)
+        except tk.TclError:
+            pass
+
+    def _set_app_identity(self) -> None:
+        try:
+            self.tk.call("tk", "appname", APP_NAME)
         except tk.TclError:
             pass
 
@@ -624,10 +710,16 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 out_var.set(path)
 
         def parse_origin(text: str) -> Tuple[float, float, float]:
-            parts = text.replace(",", " ").split()
+            if not text.strip():
+                return 0.0, 0.0, 0.0
+            parts = [p.strip() for p in text.split(",")] if "," in text else text.split()
             if len(parts) != 3:
                 raise ValueError("Origin must have three numbers, for example: 0 0 0")
-            return float(parts[0]), float(parts[1]), float(parts[2])
+            return (
+                _parse_float_expression(parts[0], "Origin x"),
+                _parse_float_expression(parts[1], "Origin y"),
+                _parse_float_expression(parts[2], "Origin z"),
+            )
 
         def write_file() -> None:
             try:
@@ -635,9 +727,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 if not str(out_path).strip():
                     raise ValueError("Please choose an output .bild file.")
                 origin = parse_origin(origin_var.get())
-                length = float(length_var.get())
-                width = float(width_var.get())
-                sphere_radius = float(sphere_var.get())
+                length = _parse_float_expression(length_var.get(), "Arrow length", default=20.0)
+                width = _parse_float_expression(width_var.get(), "Arrow width", default=1.0)
+                sphere_radius = _parse_float_expression(sphere_var.get(), "Origin sphere radius", default=0.5)
                 written = write_xyz_bild(
                     out_path,
                     origin=origin,
@@ -656,16 +748,16 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         ttk.Entry(win, textvariable=out_var).grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(win, text="Browse", command=browse_out).grid(row=0, column=2, sticky="w", **pad)
 
-        ttk.Label(win, text="Origin x y z:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Origin x y z (Å):").grid(row=1, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=origin_var, width=18).grid(row=1, column=1, sticky="w", **pad)
 
-        ttk.Label(win, text="Arrow length:").grid(row=2, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Arrow length (Å):").grid(row=2, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=length_var, width=12).grid(row=2, column=1, sticky="w", **pad)
 
-        ttk.Label(win, text="Arrow width:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Arrow width (Å):").grid(row=3, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=width_var, width=12).grid(row=3, column=1, sticky="w", **pad)
 
-        ttk.Label(win, text="Origin sphere radius:").grid(row=4, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Origin sphere radius (Å):").grid(row=4, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=sphere_var, width=12).grid(row=4, column=1, sticky="w", **pad)
 
         ttk.Label(
@@ -721,26 +813,19 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         def shown_value_and_source(key: str, default: float) -> Tuple[str, str]:
             raw = store.get(key, "").strip()
-            value = raw if raw else f"{default:.4f}"
-            try:
-                numeric = float(value)
-                shown = f"{numeric:.4f}"
-                if raw and abs(numeric - float(default)) > 1e-10:
-                    changed.append(key)
-                    source = "custom"
-                else:
-                    source = "default"
-            except Exception:
-                shown = value
-                source = "custom" if raw else "default"
-                if raw:
-                    changed.append(key)
+            numeric = _parse_float_expression(raw, key, default=default)
+            shown = _format_number(numeric)
+            if raw and abs(numeric - float(default)) > 1e-10:
+                changed.append(key)
+                source = "custom"
+            else:
+                source = "default"
             return shown, source
 
         for key, default in zip(PARAM_KEYS, defaults):
             value, source = shown_value_and_source(key, default)
             current_values.append(value)
-            default_values.append(f"{float(default):.4f}")
+            default_values.append(_format_number(default))
             sources.append(source)
 
         self.param_table.insert("", "end", values=("Current", *current_values))
@@ -761,7 +846,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 self.length_var.set("Length: 0 bp")
                 return
             try:
-                n = int(text)
+                n = _parse_int_expression(text, "Z-DNA helix length")
                 if n <= 0 or n % 2 != 0:
                     self.length_var.set("Length: invalid Z-DNA length")
                 else:
@@ -818,7 +903,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             ttk.Entry(win, textvariable=local_vars[key], width=18).grid(
                 row=row, column=col_group + 1, sticky="w", padx=10, pady=4
             )
-            ttk.Label(win, text=f"default {default:.4f}", style="Hint.TLabel").grid(
+            ttk.Label(win, text=f"default {_format_number(default)} {PARAM_UNITS.get(key, '')}", style="Hint.TLabel").grid(
                 row=row, column=col_group + 2, sticky="w", padx=(0, 12), pady=4
             )
 
@@ -831,16 +916,20 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         def restore_defaults() -> None:
             for key, default in zip(PARAM_KEYS, defaults):
-                local_vars[key].set(f"{default:.4f}")
+                local_vars[key].set(_format_number(default))
 
         def save_close() -> None:
             for key in PARAM_KEYS:
                 txt = local_vars[key].get().strip()
                 if txt:
                     try:
-                        float(txt)
+                        _parse_float_expression(txt, key)
                     except Exception:
-                        messagebox.showerror("Invalid value", f"{key} must be a number.", parent=win)
+                        messagebox.showerror(
+                            "Invalid value",
+                            f"{PARAM_LABELS.get(key, key)} must be a number or simple arithmetic expression.",
+                            parent=win,
+                        )
                         return
                 store[key] = txt
             self._refresh_param_values_display()
@@ -860,13 +949,21 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         for key, default in zip(PARAM_KEYS, defaults):
             txt = store.get(key, "").strip()
             if txt:
-                try:
-                    value = float(txt)
-                except Exception as exc:
-                    raise ValueError(f"{key} must be a number.") from exc
+                value = _parse_float_expression(txt, PARAM_LABELS.get(key, key))
                 if abs(value - float(default)) > 1e-10:
                     overrides[key] = value
         return overrides
+
+    def _get_placement_values(self) -> Dict[str, float]:
+        return {
+            "delta_z": _parse_float_expression(self.delta_z_var.get(), "delta_z (Å)", default=0.0),
+            "x": _parse_float_expression(self.x_var.get(), "x (Å)", default=0.0),
+            "y": _parse_float_expression(self.y_var.get(), "y (Å)", default=0.0),
+            "z": _parse_float_expression(self.z_var.get(), "z (Å)", default=0.0),
+            "roll": _parse_float_expression(self.roll_var.get(), "roll (°)", default=0.0),
+            "phi": _parse_float_expression(self.phi_var.get(), "phi (°)", default=0.0),
+            "theta": _parse_float_expression(self.theta_var.get(), "theta (°)", default=0.0),
+        }
 
     def on_type_changed(self) -> None:
         old_type = self._active_na_type
@@ -937,6 +1034,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         na_type = self.na_type_var.get().strip()
         try:
             param_overrides = self._get_param_overrides()
+            placement_values = self._get_placement_values()
             output_dir, tmp_dir = _ensure_output_dirs(self.output_dir_var.get())
             invrot_enabled = bool(self.invrot_enabled_var.get())
             invrot_operation = self.invrot_operation_var.get().strip() if invrot_enabled else ""
@@ -1012,7 +1110,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
             elif na_type == "Z-DNA":
                 try:
-                    length_value = int(self.z_len_var.get().strip())
+                    length_value = _parse_int_expression(self.z_len_var.get().strip(), "Z-DNA helix length")
                 except Exception as exc:
                     raise ValueError("Z-DNA helix length must be a positive even integer.") from exc
                 result = build_zdna(length_value, user_name, tmp_dir, deleteH=deleteH)
@@ -1037,13 +1135,13 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             place_result = place_after_Z(
                 str(placement_input_pdb),
                 str(placed_pdb),
-                roll_deg=self.roll_var.get(),
-                phi_deg=self.phi_var.get(),
-                theta_deg=self.theta_var.get(),
-                tx=self.x_var.get(),
-                ty=self.y_var.get(),
-                tz=self.z_var.get(),
-                delta_z=self.delta_z_var.get(),
+                roll_deg=placement_values["roll"],
+                phi_deg=placement_values["phi"],
+                theta_deg=placement_values["theta"],
+                tx=placement_values["x"],
+                ty=placement_values["y"],
+                tz=placement_values["z"],
+                delta_z=placement_values["delta_z"],
             )
             remarks_log = _prepend_final_pdb_remarks(
                 placed_pdb,
