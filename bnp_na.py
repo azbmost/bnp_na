@@ -313,6 +313,7 @@ class App(tk.Tk):
 
         type_frame = ttk.LabelFrame(self, text="Nucleic acid type", style="Bold.TLabelframe")
         type_frame.grid(row=6, column=0, columnspan=4, sticky="we", **frame_pad)
+        type_frame.grid_columnconfigure(5, weight=1)
         self.na_type_var = tk.StringVar(value="B-DNA")
         for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
             ttk.Radiobutton(
@@ -325,6 +326,12 @@ class App(tk.Tk):
         ttk.Button(type_frame, text="B-Z builder", command=self.open_bz_builder_dialog).grid(
             row=0, column=4, sticky="w", padx=(18, 8), pady=inner_y
         )
+        ttk.Label(
+            type_frame,
+            text="Join existing alternating B/Z PDBs with B-Z junction cores.",
+            style="Hint.TLabel",
+            wraplength=430,
+        ).grid(row=0, column=5, sticky="w", padx=4, pady=inner_y)
 
         self.param_frame = ttk.LabelFrame(
             self,
@@ -334,20 +341,22 @@ class App(tk.Tk):
         self.param_frame.grid(row=7, column=0, columnspan=4, sticky="we", **frame_pad)
         self.param_frame.grid_columnconfigure(1, weight=1)
 
+        self.param_controls = ttk.Frame(self.param_frame)
+        self.param_controls.grid(row=0, column=0, sticky="nsw", padx=8, pady=4)
         self.custom_btn = ttk.Button(
-            self.param_frame,
+            self.param_controls,
             text="Customize DSSR parameters",
             command=self.open_param_dialog,
         )
-        self.custom_btn.grid(row=0, column=0, sticky="w", padx=8, pady=(4, 3))
+        self.custom_btn.grid(row=0, column=0, sticky="w")
         self.param_status_var = tk.StringVar(value="")
         ttk.Label(
-            self.param_frame,
+            self.param_controls,
             textvariable=self.param_status_var,
             style="Status.TLabel",
             justify="left",
-            wraplength=820,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=(4, 3))
+            wraplength=200,
+        ).grid(row=1, column=0, sticky="w", pady=(3, 0))
 
         self.param_table = ttk.Treeview(
             self.param_frame,
@@ -357,13 +366,13 @@ class App(tk.Tk):
             selectmode="none",
             style="Compact.Treeview",
         )
-        for column, heading, width, anchor in (("row_label", "", 72, "w"),):
+        for column, heading, width, anchor in (("row_label", "", 64, "w"),):
             self.param_table.heading(column, text=heading)
             self.param_table.column(column, width=width, anchor=anchor, stretch=False)
         for key in PARAM_KEYS:
             self.param_table.heading(key, text=PARAM_LABELS.get(key, key))
-            self.param_table.column(key, width=80, anchor="center", stretch=True)
-        self.param_table.grid(row=1, column=0, columnspan=2, sticky="we", padx=8, pady=(0, 4))
+            self.param_table.column(key, width=68, anchor="center", stretch=True)
+        self.param_table.grid(row=0, column=1, sticky="we", padx=(0, 8), pady=4)
 
         self.min_frame = ttk.LabelFrame(self, text="phenix.geometry_minimization", style="Bold.TLabelframe")
         self.min_frame.grid(row=8, column=0, columnspan=4, sticky="we", **frame_pad)
