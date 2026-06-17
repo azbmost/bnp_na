@@ -9,6 +9,7 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 - Added a `Triplex converter` launcher directly to the right of the `B-Z builder` button in the helix-type row.
 - Added a native triplex converter dialog with input/output PDB selection, strand-I chain, residue range, antiparallel/parallel mode, optional strand-II/strand-III chain IDs, and strand-III residue-number start.
 - Added triplex final-PDB `REMARK BNP_NA...` provenance records.
+- Moved tool-button explanation text so each note immediately follows the button it describes.
 - Updated README guidance for triplex conventions, supported `G·G-C` and `T·A-T` motifs, GUI usage, CLI usage, and troubleshooting.
 
 ## V13.6

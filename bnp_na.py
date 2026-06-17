@@ -318,7 +318,7 @@ class App(tk.Tk):
 
         type_frame = ttk.LabelFrame(self, text="Nucleic acid type", style="Bold.TLabelframe")
         type_frame.grid(row=6, column=0, columnspan=4, sticky="we", **frame_pad)
-        type_frame.grid_columnconfigure(6, weight=1)
+        type_frame.grid_columnconfigure(7, weight=1)
         self.na_type_var = tk.StringVar(value="B-DNA")
         for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
             ttk.Radiobutton(
@@ -331,15 +331,21 @@ class App(tk.Tk):
         ttk.Button(type_frame, text="B-Z builder", command=self.open_bz_builder_dialog).grid(
             row=0, column=4, sticky="w", padx=(18, 8), pady=inner_y
         )
+        ttk.Label(
+            type_frame,
+            text="Join alternating B/Z PDBs.",
+            style="Hint.TLabel",
+            wraplength=150,
+        ).grid(row=0, column=5, sticky="w", padx=4, pady=inner_y)
         ttk.Button(type_frame, text="Triplex converter", command=self.open_triplex_converter_dialog).grid(
-            row=0, column=5, sticky="w", padx=(0, 8), pady=inner_y
+            row=0, column=6, sticky="w", padx=(18, 8), pady=inner_y
         )
         ttk.Label(
             type_frame,
-            text="B-Z joins alternating B/Z PDBs; triplex adds strand III to an input duplex.",
+            text="Add strand III to a duplex PDB.",
             style="Hint.TLabel",
-            wraplength=430,
-        ).grid(row=0, column=6, sticky="w", padx=4, pady=inner_y)
+            wraplength=180,
+        ).grid(row=0, column=7, sticky="w", padx=4, pady=inner_y)
 
         self.param_frame = ttk.LabelFrame(
             self,
@@ -498,19 +504,25 @@ class App(tk.Tk):
 
         tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
         tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
-        tools.grid_columnconfigure(2, weight=1)
+        tools.grid_columnconfigure(3, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
             row=0, column=0, sticky="w", padx=8, pady=inner_y
         )
+        ttk.Label(
+            tools,
+            text="Measure around-axis angles and write .bild output.",
+            style="Hint.TLabel",
+            wraplength=330,
+        ).grid(row=0, column=1, sticky="w", padx=4, pady=inner_y)
         ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
-            row=0, column=1, sticky="w", padx=8, pady=inner_y
+            row=0, column=2, sticky="w", padx=(18, 8), pady=inner_y
         )
         ttk.Label(
             tools,
-            text="Measure around-axis angles or create coordinate-axis .bild helpers for Chimera/ChimeraX.",
+            text="Create coordinate-axis .bild helpers.",
             style="Hint.TLabel",
-            wraplength=650,
-        ).grid(row=0, column=2, sticky="w", padx=8, pady=inner_y)
+            wraplength=260,
+        ).grid(row=0, column=3, sticky="w", padx=4, pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
