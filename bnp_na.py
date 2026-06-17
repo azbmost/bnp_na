@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.5: Building and placing nucleic acid helices.
+"""bnp_na V13.6: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -11,10 +11,10 @@ import re
 import sys
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.5"
+__version__ = "V13.6"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -23,6 +23,7 @@ sys.path.insert(0, str(LIB_DIR))
 
 from build_adna import build_adna  # noqa: E402
 from build_arna import build_arna  # noqa: E402
+from build_bz import build_bz_structure  # noqa: E402
 from build_bdna import build_bdna  # noqa: E402
 from build_common import (  # noqa: E402
     DEFAULT_PARAMS,
@@ -256,7 +257,7 @@ class App(tk.Tk):
         self.grid_columnconfigure(1, weight=1, minsize=460)
         self.grid_columnconfigure(2, weight=0, minsize=120)
         self.grid_columnconfigure(3, weight=1, minsize=300)
-        self.grid_rowconfigure(14, weight=1)
+        self.grid_rowconfigure(15, weight=1)
 
         pad = {"padx": 10, "pady": 3}
         frame_pad = {"padx": 12, "pady": 4}
@@ -475,8 +476,21 @@ class App(tk.Tk):
             row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 3)
         )
 
+        bz_tools = ttk.LabelFrame(self, text="B-Z structure builder", style="Bold.TLabelframe")
+        bz_tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
+        bz_tools.grid_columnconfigure(1, weight=1)
+        ttk.Button(bz_tools, text="Open B-Z builder", command=self.open_bz_builder_dialog).grid(
+            row=0, column=0, sticky="w", padx=8, pady=inner_y
+        )
+        ttk.Label(
+            bz_tools,
+            text="Build B/Z junction constructs from alternating input PDBs such as B1, Z1, B2, Z2.",
+            style="Hint.TLabel",
+            wraplength=850,
+        ).grid(row=0, column=1, sticky="w", padx=8, pady=inner_y)
+
         tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
-        tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
+        tools.grid(row=14, column=0, columnspan=4, sticky="we", **frame_pad)
         tools.grid_columnconfigure(1, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
             row=0, column=0, sticky="w", padx=8, pady=inner_y
@@ -498,7 +512,7 @@ class App(tk.Tk):
         ).grid(row=1, column=1, sticky="w", padx=8, pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
-        log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
+        log_frame.grid(row=15, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, wrap="none", height=12)
@@ -515,7 +529,7 @@ class App(tk.Tk):
         self.log_text.configure(state="disabled")
 
         btn_row = ttk.Frame(self)
-        btn_row.grid(row=15, column=0, columnspan=4, sticky="e", padx=12, pady=(4, 8))
+        btn_row.grid(row=16, column=0, columnspan=4, sticky="e", padx=12, pady=(4, 8))
         ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
         self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
         self.generate_btn.pack(side="left", padx=8)
@@ -771,6 +785,244 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         buttons.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=(3, 8))
         ttk.Button(buttons, text="Cancel", command=win.destroy).pack(side="left", padx=6)
         ttk.Button(buttons, text="Write", command=write_file).pack(side="left", padx=6)
+
+    def open_bz_builder_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("B-Z structure builder")
+        win.geometry("900x720+180+100")
+        win.minsize(760, 620)
+        win.transient(self)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_columnconfigure(2, weight=1)
+        win.grid_rowconfigure(1, weight=1)
+        win.grid_rowconfigure(9, weight=1)
+
+        try:
+            out_dir = Path(self.output_dir_var.get()).expanduser()
+            if not out_dir.is_absolute():
+                out_dir = out_dir.resolve()
+        except Exception:
+            out_dir = DEFAULT_OUTPUT_DIR
+
+        files_text = scrolledtext.ScrolledText(win, width=90, height=7, wrap="none")
+        out_var = tk.StringVar(value=str(out_dir / "make_BZ_out.pdb"))
+        axis_mode_var = tk.StringVar(value="codirectional")
+        axis_source_var = tk.StringVar(value="auto")
+        auto_trim_var = tk.BooleanVar(value=True)
+        out_default_mode = {"value": True}
+
+        def _files() -> list[str]:
+            return [line.strip() for line in files_text.get("1.0", "end").splitlines() if line.strip()]
+
+        def _input_default_dir() -> str:
+            files = _files()
+            if files:
+                try:
+                    return str(Path(files[0]).expanduser().resolve().parent)
+                except Exception:
+                    return str(out_dir)
+            return str(out_dir)
+
+        def _out_is_default_like() -> bool:
+            current = out_var.get().strip()
+            if not current:
+                return True
+            return Path(current).name == "make_BZ_out.pdb" and out_default_mode["value"]
+
+        def _update_default_output_from_inputs() -> None:
+            files = _files()
+            if files and _out_is_default_like():
+                try:
+                    out_var.set(str(Path(files[0]).expanduser().resolve().parent / "make_BZ_out.pdb"))
+                    out_default_mode["value"] = True
+                except Exception:
+                    pass
+
+        def add_files() -> None:
+            selected = filedialog.askopenfilenames(
+                title="Choose B/Z input PDB files in alternating order",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if not selected:
+                return
+            current = files_text.get("1.0", "end").strip()
+            added = "\n".join(selected)
+            files_text.delete("1.0", "end")
+            files_text.insert("1.0", (current + "\n" + added).strip() if current else added)
+            _update_default_output_from_inputs()
+
+        def clear_files() -> None:
+            files_text.delete("1.0", "end")
+
+        def browse_out() -> None:
+            current_out = Path(out_var.get().strip() or "make_BZ_out.pdb").expanduser()
+            initialfile = current_out.name or "make_BZ_out.pdb"
+            initialdir = str(current_out.parent) if str(current_out.parent) not in ("", ".") else _input_default_dir()
+            selected = filedialog.asksaveasfilename(
+                title="Choose B-Z output PDB",
+                initialdir=initialdir,
+                initialfile=initialfile,
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                out_default_mode["value"] = False
+                out_var.set(selected)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(
+            win,
+            text="Input PDB files must alternate by order: B1, Z1, B2, Z2, ...",
+            style="Hint.TLabel",
+            wraplength=820,
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 2))
+        files_text.grid(row=1, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 4))
+
+        file_buttons = ttk.Frame(win)
+        file_buttons.grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 6))
+        ttk.Button(file_buttons, text="Add input PDBs", command=add_files).pack(side="left", padx=(0, 8))
+        ttk.Button(file_buttons, text="Clear", command=clear_files).pack(side="left")
+
+        ttk.Label(win, text="Output PDB:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=out_var).grid(row=3, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_out).grid(row=3, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Axis correction:").grid(row=4, column=0, sticky="e", **pad)
+        ttk.Combobox(
+            win,
+            textvariable=axis_mode_var,
+            values=("codirectional", "collinear", "none"),
+            state="readonly",
+            width=16,
+        ).grid(row=4, column=1, sticky="w", **pad)
+        ttk.Label(
+            win,
+            text="Default codirectional rotates helix axes parallel without lateral axis-line shift.",
+            style="Hint.TLabel",
+            wraplength=420,
+        ).grid(row=4, column=2, sticky="w", padx=10, pady=4)
+
+        ttk.Label(win, text="Axis source:").grid(row=5, column=0, sticky="e", **pad)
+        ttk.Combobox(
+            win,
+            textvariable=axis_source_var,
+            values=("auto", "dssr", "pca"),
+            state="readonly",
+            width=16,
+        ).grid(row=5, column=1, sticky="w", **pad)
+        ttk.Label(
+            win,
+            text="auto tries DSSR --more through align2z.py, then falls back to C1' PCA.",
+            style="Hint.TLabel",
+            wraplength=420,
+        ).grid(row=5, column=2, sticky="w", padx=10, pady=4)
+
+        ttk.Checkbutton(
+            win,
+            text=(
+                "Auto-trim terminal Z-DNA bp if needed. For DSSR/bnp_na Z inputs, "
+                "prepare Z-DNA 2 bp longer than the target final Z segment."
+            ),
+            variable=auto_trim_var,
+        ).grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 4))
+
+        ttk.Label(
+            win,
+            text=(
+                "The builder inserts B-Z junction cores, trims overlapping base pairs, and writes both a final ligated "
+                "PDB plus a raw aligned PDB with _raw before the file extension."
+            ),
+            style="Hint.TLabel",
+            wraplength=820,
+        ).grid(row=7, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 4))
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=8, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 4))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Build B-Z structure")
+        run_btn.pack(side="left", padx=6)
+
+        bz_log = scrolledtext.ScrolledText(win, width=90, height=12, wrap="none")
+        try:
+            bz_log.configure(font=("Menlo", 10))
+        except Exception:
+            bz_log.configure(font=("Courier", 10))
+        bz_log.grid(row=9, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+
+        def _set_dialog_log(text: str) -> None:
+            bz_log.delete("1.0", "end")
+            bz_log.insert("1.0", text)
+            bz_log.see("end")
+            win.update_idletasks()
+
+        def run_bz() -> None:
+            files = _files()
+            if len(files) < 2:
+                messagebox.showerror("B-Z structure builder", "Please provide at least two files: B1 and Z1.", parent=win)
+                return
+            if _out_is_default_like():
+                _update_default_output_from_inputs()
+            out_text = out_var.get().strip() or str(Path(_input_default_dir()) / "make_BZ_out.pdb")
+
+            run_btn.configure(state="disabled")
+            start_log = (
+                f"=== {APP_NAME} {__version__} B-Z job started ===\n"
+                f"Input files: {len(files)}\n"
+                f"Output PDB: {out_text}\n"
+                f"Axis correction: {axis_mode_var.get()}\n"
+                f"Axis source: {axis_source_var.get()}\n"
+                f"Auto-trim Z-DNA terminals: {'ON' if auto_trim_var.get() else 'OFF'}\n"
+            )
+            _set_dialog_log(start_log)
+            self._set_log(start_log)
+
+            try:
+                result = build_bz_structure(
+                    files,
+                    out_text,
+                    axis_mode=axis_mode_var.get(),
+                    axis_source=axis_source_var.get(),
+                    auto_trim_z=auto_trim_var.get(),
+                )
+                pdb_out = Path(str(result["pdb_out"]))
+                remarks_log = _prepend_final_pdb_remarks(
+                    pdb_out,
+                    na_type="B-Z DNA",
+                    l_form_enabled=False,
+                    invrot_result=None,
+                )
+                full_log = "\n".join(
+                    [
+                        f"=== {APP_NAME} {__version__} B-Z job summary ===",
+                        f"Final B-Z PDB: {pdb_out}",
+                        f"Raw aligned PDB: {result['pdb_raw']}",
+                        f"Axis correction: {result['axis_mode']}",
+                        f"Axis source: {result['axis_source']}",
+                        f"Auto-trim Z-DNA terminals: {'ON' if result['auto_trim_z'] else 'OFF'}",
+                        "",
+                        str(result.get("log_text", "")),
+                        "",
+                        remarks_log,
+                    ]
+                )
+                _set_dialog_log(full_log)
+                self._set_log(full_log)
+                messagebox.showinfo(
+                    "B-Z structure builder",
+                    f"Final B-Z PDB:\n{pdb_out}\n\nRaw aligned PDB:\n{result['pdb_raw']}",
+                    parent=win,
+                )
+            except PipelineError as exc:
+                log_text = getattr(exc, "log_text", "") or str(exc)
+                _set_dialog_log(log_text)
+                self._set_log(log_text)
+                messagebox.showerror("B-Z structure builder", str(exc), parent=win)
+            finally:
+                run_btn.configure(state="normal")
+
+        run_btn.configure(command=run_bz)
 
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"

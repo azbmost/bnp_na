@@ -1,8 +1,8 @@
 # bnp_na
 
-`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file.
+`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes a B-Z structure builder for joining existing B-DNA and Z-DNA PDB segments through B-Z junction cores.
 
-The current app version is `V13.5`.
+The current app version is `V13.6`.
 
 ## What It Does
 
@@ -13,6 +13,7 @@ The current app version is `V13.5`.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
+- Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
@@ -78,6 +79,8 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 6. Adjust DSSR parameters, minimization, hydrogens, mirror-image L-form conversion, and placement values if needed.
 7. Click `Generate`.
 8. Read the embedded log for the exact commands, intermediate files, and final placed PDB path.
+
+For B-Z junction constructs, use the separate `B-Z structure builder` section near the bottom of the main GUI and click `Open B-Z builder`. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
 
 ## GUI Field Guide
 
@@ -176,6 +179,129 @@ x3dna-dssr fiber --model=Z-DNA
 ```
 
 The Z-DNA GUI path does not use the DSSR 12-parameter table and does not offer Phenix minimization.
+
+## B-Z Structure Builder
+
+`bnp_na` V13.6 adds a B-Z structure builder based on the bundled `bnp_na_lib/make_BZV2_3.py` and `bnp_na_lib/core_BZ.py` scripts. This tool is different from the main `Generate` button: it does not read the sequence field and it does not create one isolated helix. Instead, it takes already-built B-DNA and Z-DNA PDB files and joins them through B-Z junction core structures.
+
+In the main GUI, use the `B-Z structure builder` section near the bottom and click:
+
+```text
+Open B-Z builder
+```
+
+### Input Order
+
+Add input PDB files in strict alternating order, starting with B-DNA:
+
+```text
+B1.pdb Z1.pdb B2.pdb Z2.pdb ...
+```
+
+The minimum input is two files:
+
+```text
+B1.pdb Z1.pdb
+```
+
+The builder assumes the type from the file order, not from the filename. A file named `my_z_model.pdb` in the first position is still treated as the B segment. The number of B models must be at least the number of Z models.
+
+Each input helix should be a double-stranded DNA PDB with two main chains. The script picks the two chains with the largest residue counts.
+
+### What The Builder Does
+
+For every neighboring pair of input helices, the builder:
+
+- Inserts one fresh copy of the bundled B-Z junction core.
+- Fits the core to the previous helix using sugar atoms `C1'`, `C2'`, `C3'`, `C4'`, `O5'`, and `C5'`.
+- Fits the next helix to the other side of the core.
+- Trims overlapping base pairs at the helix ends while keeping the full junction core.
+- Writes a final ligated PDB with two continuous DNA strands numbered 5' to 3'.
+- Writes a raw aligned PDB with `_raw` before the file extension.
+
+For example, if the output is:
+
+```text
+multi_BZ.pdb
+```
+
+the raw aligned file is:
+
+```text
+multi_BZ_raw.pdb
+```
+
+The final B-Z PDB gets `REMARK BNP_NA...` provenance records, including the `bnp_na` version and AZBMOST repository link. Since the B-Z builder does not itself make an L-form model, it writes `REMARK BNP_NA_L_FORM NO`.
+
+### Axis Correction
+
+The `Axis correction` option controls what happens after the local junction fit.
+
+`codirectional` is the default. It rotates the moving helix so the fitted helix axes point in the same direction, but it does not laterally shift the helix to force both axes onto the exact same infinite line. This usually preserves the local junction geometry better.
+
+`collinear` is stricter. It first makes the axes codirectional, then applies a lateral shift so the fitted axis lines coincide. This can make the global axis cleaner, but it may slightly stretch local junction contacts.
+
+`none` skips post-fit axis correction and uses only the local sugar-atom junction fit.
+
+### Axis Source
+
+The `Axis source` option controls how the helix axis is estimated for the post-fit correction.
+
+`auto` is the default. It tries DSSR `--more` axis extraction through `align2z.py`; if DSSR is not available for that axis calculation, it falls back to PCA/SVD on `C1'` atoms.
+
+`dssr` requires DSSR axis extraction and stops if that fails.
+
+`pca` uses only the internal `C1'` PCA axis estimate.
+
+### Z-DNA Terminal Auto-Trim
+
+For this builder, each selected Z-DNA chain should start with a pyrimidine (`C`, `T`, or `U`) and end with a purine (`A` or `G`) in residue-number order. This terminal phase keeps the Z-DNA end in register with the bundled B-Z core.
+
+The GUI default is:
+
+```text
+Auto-trim terminal Z-DNA bp if needed: ON
+```
+
+When enabled, the builder can remove at most one base pair from each Z-DNA end to satisfy the terminal phase requirement. For Z-DNA generated by DSSR or by the `bnp_na` Z-DNA path, prepare the original Z-DNA input 2 bp longer than the target final Z segment so this correction can trim one base pair from each end if needed.
+
+If you turn auto-trim off and a Z-DNA file has the wrong terminal phase, the build stops with an explicit error.
+
+### Direct Command-Line Use
+
+The bundled B-Z builder remains directly runnable:
+
+```bash
+python3 bnp_na_lib/make_BZV2_3.py --out multi_BZ.pdb B1.pdb Z1.pdb
+```
+
+Use codirectional axis correction explicitly:
+
+```bash
+python3 bnp_na_lib/make_BZV2_3.py \
+  --axis-mode codirectional \
+  --axis-source auto \
+  --out multi_BZ.pdb \
+  B1.pdb Z1.pdb B2.pdb
+```
+
+Use strict collinear correction:
+
+```bash
+python3 bnp_na_lib/make_BZV2_3.py \
+  --axis-mode collinear \
+  --out multi_BZ.pdb \
+  B1.pdb Z1.pdb
+```
+
+Disable Z-DNA terminal auto-trim:
+
+```bash
+python3 bnp_na_lib/make_BZV2_3.py \
+  --no-z-auto-trim \
+  --out multi_BZ.pdb \
+  B1.pdb Z1.pdb
+```
 
 ## DSSR Parameter Customization
 
@@ -355,7 +481,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.5 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.6 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -380,9 +506,9 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 ## Helical-Axis Angle Tool
 
-`bnp_na` V13.5 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+`bnp_na` V13.6 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
 
-The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script update. Earlier public versions used `angle_helical_axisV2.py`. V13.5 adds an adjustable axis drawing margin and more explanatory `.comment` records in the generated BILD file.
+The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script update. Earlier public versions used `angle_helical_axisV2.py`. V13.5 added an adjustable axis drawing margin and more explanatory `.comment` records in the generated BILD file.
 
 In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
 
@@ -505,7 +631,7 @@ The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <ht
 
 ## XYZ Axes BILD Tool
 
-`bnp_na` V13.5 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
+`bnp_na` V13.6 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
 
 - A sphere at the origin.
 - A red X-axis arrow.
@@ -603,6 +729,7 @@ The log includes:
 - The final PDB `REMARK` annotations, including provenance and L-form residue records.
 - Parameter overrides applied from the GUI.
 - The final orientation/placement transform.
+- B-Z builder input order, axis mode/source, Z-DNA auto-trim status, junction-fit messages, final B-Z PDB path, and raw aligned PDB path.
 
 ## Generated Files
 
@@ -627,6 +754,8 @@ The final placed model is written outside `tmp_file/`:
 <output folder>/<helix-name>_oriented_placed.pdb
 ```
 
+B-Z builder outputs are written to the path chosen in the B-Z dialog. They are not placed in `tmp_file/` unless you explicitly choose that folder. The paired raw aligned file is written beside the final B-Z PDB with `_raw` added to the filename.
+
 ## Common Problems
 
 ### `x3dna-dssr: NOT FOUND`
@@ -648,6 +777,12 @@ Check that Phenix is installed and that the params file exists. If Phenix is ins
 ### Invalid Z-DNA Length
 
 Z-DNA length must be positive and even. Examples that work: `10`, `20`, `42`. Examples that fail: `0`, `-2`, `15`, `abc`.
+
+### B-Z Builder Input Order Or Z-DNA Phase Failed
+
+The B-Z builder assumes the input order is B, Z, B, Z, starting with B. It does not infer B or Z from filenames. Check the file list in the B-Z dialog before running.
+
+If the error mentions Z-DNA terminal phase, turn on `Auto-trim terminal Z-DNA bp if needed`, or regenerate the Z-DNA input 2 bp longer than the target final Z segment. The builder needs selected Z chains to start with a pyrimidine and end with a purine.
 
 ### The Final PDB Is Not Where Expected
 
@@ -693,6 +828,9 @@ bnp_na.py                  Main GUI/controller
 CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/angle_helical_axisV2_1.py Helical-axis radial-angle calculator and BILD writer
+bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
+bnp_na_lib/make_BZV2_3.py   Standalone B-Z structure builder CLI/GUI
+bnp_na_lib/core_BZ.py       Bundled B-Z junction core structure data
 bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
 bnp_na_lib/xyz_bild.py      Coordinate-axis BILD writer

@@ -2,8 +2,13 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
-## Unreleased
+## V13.6
 
+- Added B-Z structure building from alternating B-DNA/Z-DNA PDB inputs using bundled `make_BZV2_3.py` and `core_BZ.py`.
+- Added `bnp_na_lib/build_bz.py` so the main app can run the B-Z pipeline, capture its log, and report final/raw output paths.
+- Added a compact main-GUI `B-Z structure builder` launcher and a dedicated dialog for input PDBs, output path, axis correction mode, axis source, and Z-DNA terminal auto-trim.
+- Added B-Z final-PDB `REMARK BNP_NA...` provenance records.
+- Expanded README guidance for B-Z input order, axis correction, axis source, Z-DNA terminal auto-trim, direct CLI usage, and troubleshooting.
 - Refined the main GUI typography: the sequence input label is no longer bold, while functional module titles use bold label-frame headings.
 - Updated the mirror-image chirality module title to `Mirror-image L-form chirality (L-DNA)`.
 - Replaced the one-line current helical-parameter display with a compact three-row horizontal table showing current values, defaults, and default/custom source status.
