@@ -80,7 +80,7 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 7. Click `Generate`.
 8. Read the embedded log for the exact commands, intermediate files, and final placed PDB path.
 
-For B-Z junction constructs, use the separate `B-Z structure builder` section near the bottom of the main GUI and click `Open B-Z builder`. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
+For B-Z junction constructs, click the `B-Z builder` button on the same row as the `B-DNA`, `A-DNA`, `A-RNA`, and `Z-DNA` choices. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
 
 ## GUI Field Guide
 
@@ -184,10 +184,10 @@ The Z-DNA GUI path does not use the DSSR 12-parameter table and does not offer P
 
 `bnp_na` V13.6 adds a B-Z structure builder based on the bundled `bnp_na_lib/make_BZV2_3.py` and `bnp_na_lib/core_BZ.py` scripts. This tool is different from the main `Generate` button: it does not read the sequence field and it does not create one isolated helix. Instead, it takes already-built B-DNA and Z-DNA PDB files and joins them through B-Z junction core structures.
 
-In the main GUI, use the `B-Z structure builder` section near the bottom and click:
+In the main GUI, use the `B-Z builder` button directly after the four helix-type choices:
 
 ```text
-Open B-Z builder
+B-Z builder
 ```
 
 ### Input Order
@@ -239,7 +239,7 @@ The `Axis correction` option controls what happens after the local junction fit.
 
 `codirectional` is the default. It rotates the moving helix so the fitted helix axes point in the same direction, but it does not laterally shift the helix to force both axes onto the exact same infinite line. This usually preserves the local junction geometry better.
 
-`collinear` is stricter. It first makes the axes codirectional, then applies a lateral shift so the fitted axis lines coincide. This can make the global axis cleaner, but it may slightly stretch local junction contacts.
+`collinear` is stricter. It first makes the axes codirectional, then applies a lateral shift so the fitted axis lines coincide. This can make the global axis cleaner, but it may stretch bond lengths or local junction contacts. Because of that tradeoff, true collinear mode is useful to test but is not always the optimal final model compared with the default `codirectional` mode.
 
 `none` skips post-fit axis correction and uses only the local sugar-atom junction fit.
 

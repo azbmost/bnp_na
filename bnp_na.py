@@ -257,7 +257,7 @@ class App(tk.Tk):
         self.grid_columnconfigure(1, weight=1, minsize=460)
         self.grid_columnconfigure(2, weight=0, minsize=120)
         self.grid_columnconfigure(3, weight=1, minsize=300)
-        self.grid_rowconfigure(15, weight=1)
+        self.grid_rowconfigure(14, weight=1)
 
         pad = {"padx": 10, "pady": 3}
         frame_pad = {"padx": 12, "pady": 4}
@@ -322,6 +322,9 @@ class App(tk.Tk):
                 variable=self.na_type_var,
                 command=self.on_type_changed,
             ).grid(row=0, column=idx, padx=8, pady=inner_y, sticky="w")
+        ttk.Button(type_frame, text="B-Z builder", command=self.open_bz_builder_dialog).grid(
+            row=0, column=4, sticky="w", padx=(18, 8), pady=inner_y
+        )
 
         self.param_frame = ttk.LabelFrame(
             self,
@@ -476,43 +479,24 @@ class App(tk.Tk):
             row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 3)
         )
 
-        bz_tools = ttk.LabelFrame(self, text="B-Z structure builder", style="Bold.TLabelframe")
-        bz_tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
-        bz_tools.grid_columnconfigure(1, weight=1)
-        ttk.Button(bz_tools, text="Open B-Z builder", command=self.open_bz_builder_dialog).grid(
-            row=0, column=0, sticky="w", padx=8, pady=inner_y
-        )
-        ttk.Label(
-            bz_tools,
-            text="Build B/Z junction constructs from alternating input PDBs such as B1, Z1, B2, Z2.",
-            style="Hint.TLabel",
-            wraplength=850,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=inner_y)
-
         tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
-        tools.grid(row=14, column=0, columnspan=4, sticky="we", **frame_pad)
-        tools.grid_columnconfigure(1, weight=1)
+        tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
+        tools.grid_columnconfigure(2, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
             row=0, column=0, sticky="w", padx=8, pady=inner_y
         )
-        ttk.Label(
-            tools,
-            text="Measure the around-axis angle between two atom or XYZ points and write a Chimera/ChimeraX .bild file.",
-            style="Hint.TLabel",
-            wraplength=850,
-        ).grid(row=0, column=1, sticky="w", padx=8, pady=inner_y)
         ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
-            row=1, column=0, sticky="w", padx=8, pady=inner_y
+            row=0, column=1, sticky="w", padx=8, pady=inner_y
         )
         ttk.Label(
             tools,
-            text="Create a red/yellow/blue coordinate-axis .bild helper with configurable arrow length and width.",
+            text="Measure around-axis angles or create coordinate-axis .bild helpers for Chimera/ChimeraX.",
             style="Hint.TLabel",
-            wraplength=850,
-        ).grid(row=1, column=1, sticky="w", padx=8, pady=inner_y)
+            wraplength=650,
+        ).grid(row=0, column=2, sticky="w", padx=8, pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
-        log_frame.grid(row=15, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
+        log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
         log_frame.grid_columnconfigure(0, weight=1)
         log_frame.grid_rowconfigure(0, weight=1)
         self.log_text = tk.Text(log_frame, wrap="none", height=12)
@@ -529,7 +513,7 @@ class App(tk.Tk):
         self.log_text.configure(state="disabled")
 
         btn_row = ttk.Frame(self)
-        btn_row.grid(row=16, column=0, columnspan=4, sticky="e", padx=12, pady=(4, 8))
+        btn_row.grid(row=15, column=0, columnspan=4, sticky="e", padx=12, pady=(4, 8))
         ttk.Button(btn_row, text="Quit", command=self.destroy).pack(side="left", padx=8)
         self.generate_btn = ttk.Button(btn_row, text="Generate", command=self.on_generate)
         self.generate_btn.pack(side="left", padx=8)
