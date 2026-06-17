@@ -1186,8 +1186,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             win,
             text="antiparallel = G·G-C; parallel = T·A-T.",
             style="Hint.TLabel",
-            wraplength=460,
-        ).grid(row=4, column=1, sticky="w", padx=(170, 10), pady=4)
+            wraplength=300,
+        ).grid(row=4, column=2, sticky="w", padx=(4, 10), pady=4)
 
         ttk.Label(win, text="Strand II chain (optional):").grid(row=5, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=strand_ii_var, width=10).grid(row=5, column=1, sticky="w", **pad)
