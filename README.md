@@ -1,8 +1,8 @@
 # bnp_na
 
-`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes a B-Z structure builder for joining existing B-DNA and Z-DNA PDB segments through B-Z junction cores.
+`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes a B-Z structure builder for joining existing B-DNA and Z-DNA PDB segments through B-Z junction cores, plus a triplex converter for adding a third strand to an input duplex PDB.
 
-The current app version is `V13.6`.
+The current app version is `V13.7`.
 
 ## What It Does
 
@@ -14,6 +14,7 @@ The current app version is `V13.6`.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
+- Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
@@ -81,6 +82,8 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 8. Read the embedded log for the exact commands, intermediate files, and final placed PDB path.
 
 For B-Z junction constructs, click the `B-Z builder` button on the same row as the `B-DNA`, `A-DNA`, `A-RNA`, and `Z-DNA` choices. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
+
+For triplex construction from an existing duplex PDB, click the `Triplex converter` button directly to the right of `B-Z builder`.
 
 ## GUI Field Guide
 
@@ -182,7 +185,7 @@ The Z-DNA GUI path does not use the DSSR 12-parameter table and does not offer P
 
 ## B-Z Structure Builder
 
-`bnp_na` V13.6 adds a B-Z structure builder based on the bundled `bnp_na_lib/make_BZV2_3.py` and `bnp_na_lib/core_BZ.py` scripts. This tool is different from the main `Generate` button: it does not read the sequence field and it does not create one isolated helix. Instead, it takes already-built B-DNA and Z-DNA PDB files and joins them through B-Z junction core structures.
+The B-Z structure builder is based on the bundled `bnp_na_lib/make_BZV2_3.py` and `bnp_na_lib/core_BZ.py` scripts. This tool is different from the main `Generate` button: it does not read the sequence field and it does not create one isolated helix. Instead, it takes already-built B-DNA and Z-DNA PDB files and joins them through B-Z junction core structures.
 
 In the main GUI, use the `B-Z builder` button directly after the four helix-type choices:
 
@@ -301,6 +304,92 @@ python3 bnp_na_lib/make_BZV2_3.py \
   --no-z-auto-trim \
   --out multi_BZ.pdb \
   B1.pdb Z1.pdb
+```
+
+## Triplex Converter
+
+`bnp_na` V13.7 adds a triplex converter based on the bundled `bnp_na_lib/convert_to_triplex_pdbV2_1.py` script. This tool is different from the main `Generate` button: it reads an existing duplex DNA PDB and adds a third Hoogsteen or reverse-Hoogsteen strand over a selected residue range.
+
+In the main GUI, use the `Triplex converter` button directly to the right of `B-Z builder`:
+
+```text
+Triplex converter
+```
+
+### Triplex Convention
+
+The converter writes triplets as:
+
+```text
+Z·X-Y
+```
+
+`X-Y` is the Watson-Crick duplex base pair already present in the input PDB. `Z` is the third-strand base added by the converter.
+
+The GUI and log use these strand names:
+
+- Strand I: the purine duplex strand, `X` in `Z·X-Y`.
+- Strand II: the Watson-Crick partner, `Y` in `Z·X-Y`.
+- Strand III: the added Hoogsteen or reverse-Hoogsteen strand, `Z` in `Z·X-Y`.
+
+### Supported Modes
+
+Two embedded base-triple templates are bundled:
+
+- `antiparallel`: `G·G-C`.
+- `parallel`: `T·A-T`.
+
+Only the selected residue range on strand I has to match the mode requirement. For `antiparallel`, the selected strand-I range must be all `G`. For `parallel`, the selected strand-I range must be all `A`. The rest of the input strand may contain other bases.
+
+Strand II can be left blank. In that case, the converter searches other chains for a matching contiguous partner segment. Strand III can also be left blank; the converter then chooses an unused chain ID, preferring `C` when available.
+
+### GUI Fields
+
+`Input duplex PDB` is the existing duplex model to convert.
+
+`Output PDB` defaults to the input filename with `_2TH` inserted before the extension. For example:
+
+```text
+duplex.pdb -> duplex_2TH.pdb
+```
+
+`Strand I purine chain` is the chain ID for the purine strand in the duplex.
+
+`Strand I residue range` is the residue-number range on strand I to convert.
+
+`Triplex mode` chooses the embedded base-triple template.
+
+`Strand II chain` is optional. Use it when auto-detection chooses the wrong partner chain or you want to make the mapping explicit.
+
+`Strand III chain` is optional. Use it when you need a specific chain ID for the added strand.
+
+`Strand III first resSeq` controls the residue number assigned to the first residue of the added third strand.
+
+`Refresh strand info` reads the input PDB, lists detected chains and sequences, and previews whether the selected strand-I range matches the chosen mode.
+
+The final triplex PDB gets `REMARK BNP_NA...` provenance records, including the `bnp_na` version and AZBMOST repository link. Since the triplex converter does not itself make an L-form model, it writes `REMARK BNP_NA_L_FORM NO`.
+
+### Direct Command-Line Use
+
+The bundled triplex converter remains directly runnable:
+
+```bash
+python3 bnp_na_lib/convert_to_triplex_pdbV2_1.py duplex.pdb \
+  --strand-I A \
+  --range 10:18 \
+  --mode antiparallel
+```
+
+Use parallel `T·A-T` mode and choose strand III chain/residue numbering:
+
+```bash
+python3 bnp_na_lib/convert_to_triplex_pdbV2_1.py duplex.pdb \
+  --strand-I A \
+  --range 7-12 \
+  --mode parallel \
+  --strand-III D \
+  --strand-III-start 101 \
+  --out duplex_triplex.pdb
 ```
 
 ## DSSR Parameter Customization
@@ -481,7 +570,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.6 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.7 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -506,7 +595,7 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 ## Helical-Axis Angle Tool
 
-`bnp_na` V13.6 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+`bnp_na` V13.7 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
 
 The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script update. Earlier public versions used `angle_helical_axisV2.py`. V13.5 added an adjustable axis drawing margin and more explanatory `.comment` records in the generated BILD file.
 
@@ -631,7 +720,7 @@ The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <ht
 
 ## XYZ Axes BILD Tool
 
-`bnp_na` V13.6 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
+`bnp_na` V13.7 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
 
 - A sphere at the origin.
 - A red X-axis arrow.
@@ -730,6 +819,7 @@ The log includes:
 - Parameter overrides applied from the GUI.
 - The final orientation/placement transform.
 - B-Z builder input order, axis mode/source, Z-DNA auto-trim status, junction-fit messages, final B-Z PDB path, and raw aligned PDB path.
+- Triplex converter chain/sequence preview, selected strand-I range check, mode, strand IDs, template-fit RMSD summary, and final triplex PDB path.
 
 ## Generated Files
 
@@ -784,6 +874,12 @@ The B-Z builder assumes the input order is B, Z, B, Z, starting with B. It does 
 
 If the error mentions Z-DNA terminal phase, turn on `Auto-trim terminal Z-DNA bp if needed`, or regenerate the Z-DNA input 2 bp longer than the target final Z segment. The builder needs selected Z chains to start with a pyrimidine and end with a purine.
 
+### Triplex Converter Range Or Partner Strand Failed
+
+For `antiparallel` mode, the selected strand-I range must be all `G`. For `parallel` mode, the selected strand-I range must be all `A`. Use `Refresh strand info` to preview the selected sequence before running conversion.
+
+If strand-II auto-detection fails, specify the `Strand II chain` explicitly. The selected partner segment must be a contiguous `C` segment for antiparallel `G·G-C` or a contiguous `T` segment for parallel `T·A-T`.
+
 ### The Final PDB Is Not Where Expected
 
 The final placed PDB goes directly in the selected output folder. Intermediate files go in `tmp_file/` below that folder.
@@ -829,8 +925,10 @@ CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/angle_helical_axisV2_1.py Helical-axis radial-angle calculator and BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
+bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter
 bnp_na_lib/make_BZV2_3.py   Standalone B-Z structure builder CLI/GUI
 bnp_na_lib/core_BZ.py       Bundled B-Z junction core structure data
+bnp_na_lib/convert_to_triplex_pdbV2_1.py Standalone duplex-to-triplex converter CLI/GUI
 bnp_na_lib/pdb_inv_rotV2.py Optional inversion/reflection helper for L-form mirror models
 bnp_na_lib/pdb_name_standard.py PDB residue/atom-name standardization helper
 bnp_na_lib/xyz_bild.py      Coordinate-axis BILD writer

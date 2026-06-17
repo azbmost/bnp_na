@@ -1,4 +1,4 @@
-# bnp_na V13.6 updated folder
+# bnp_na V13.7 updated folder
 
 Top-level app folder contains only:
 
@@ -14,10 +14,12 @@ Top-level app folder contains only:
 - `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=A-RNA --par-type=heli`; optional phenix.geometry_minimization.
 - `build_zdna.py` — Z-DNA builder using DSSR fiber; no phenix.geometry_minimization option.
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
+- `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_1.py` — helical-axis radial-angle calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `make_BZV2_3.py` — standalone B-Z structure builder incorporated into V13.6; combines alternating B-DNA/Z-DNA PDB inputs using B-Z junction cores.
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
+- `convert_to_triplex_pdbV2_1.py` — standalone duplex-to-triplex converter incorporated into V13.7; supports antiparallel G·G-C and parallel T·A-T triplex motifs.
 - `geometry_utils.py` — shared rotation/vector helpers.
 - `na_placer.py` — final orient/place transformation after +Z alignment.
 - `pdb_inv_rotV2.py` — optional inversion/reflection helper for mirror-image L-form models after align-to-Z and before final placement.
@@ -27,7 +29,7 @@ Top-level app folder contains only:
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
 
-## V13.6 changes
+## V13.7 changes
 
 1. Log output is embedded in the main GUI.
 2. Startup immediately checks `x3dna-dssr` and prints the executable/version/help output into the embedded log.
@@ -35,7 +37,7 @@ Top-level app folder contains only:
 4. Output folder is user-selectable. Final placed PDB is written to the selected folder; intermediate files are written to `<selected folder>/tmp_file/`.
 5. B-DNA, A-DNA, and A-RNA have a `phenix.geometry_minimization` checkbox and params-file field. Z-DNA does not provide this option.
 6. GUI text uses `GIDEON` in all capitals.
-7. Version is `bnp_na V13.6`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+7. Version is `bnp_na V13.7`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
 8. Sequence length is updated in the GUI after sequence input changes.
 9. Optional mirror-image L-form generation is available after align-to-Z and before final orient/place, using `pdb_inv_rotV2.py` i-mode and o-mode operations.
 10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2_1.py`.
@@ -44,3 +46,5 @@ Top-level app folder contains only:
 13. An XYZ axes BILD writer is available from the main GUI and can also be run directly as `bnp_na_lib/xyz_bild.py`.
 14. A B-Z structure builder is available from the main GUI and can also be run directly as `bnp_na_lib/make_BZV2_3.py`.
 15. The B-Z builder uses bundled `core_BZ.py` junction data and writes final/raw PDB outputs with captured logs in the main app.
+16. A triplex converter is available from the main GUI and can also be run directly as `bnp_na_lib/convert_to_triplex_pdbV2_1.py`.
+17. The triplex converter uses bundled base-triple templates to add strand III to an input duplex PDB and writes final PDB outputs with captured logs in the main app.

@@ -2,6 +2,15 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.7
+
+- Added triplex conversion from an input duplex PDB using bundled `convert_to_triplex_pdbV2_1.py`.
+- Added `bnp_na_lib/build_triplex.py` so the main app can preview duplex chains/sequences, run the conversion, capture its log, and report the output PDB path.
+- Added a `Triplex converter` launcher directly to the right of the `B-Z builder` button in the helix-type row.
+- Added a native triplex converter dialog with input/output PDB selection, strand-I chain, residue range, antiparallel/parallel mode, optional strand-II/strand-III chain IDs, and strand-III residue-number start.
+- Added triplex final-PDB `REMARK BNP_NA...` provenance records.
+- Updated README guidance for triplex conventions, supported `G·G-C` and `T·A-T` motifs, GUI usage, CLI usage, and troubleshooting.
+
 ## V13.6
 
 - Added B-Z structure building from alternating B-DNA/Z-DNA PDB inputs using bundled `make_BZV2_3.py` and `core_BZ.py`.

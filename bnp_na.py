@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.6: Building and placing nucleic acid helices.
+"""bnp_na V13.7: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.6"
+__version__ = "V13.7"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -33,6 +33,11 @@ from build_common import (  # noqa: E402
     expand_sequence,
     sanitize_basename,
     sequence_alphabet,
+)
+from build_triplex import (  # noqa: E402
+    build_triplex_from_duplex,
+    default_triplex_output_path,
+    describe_triplex_input,
 )
 from build_zdna import build_zdna  # noqa: E402
 from angle_helical_axisV2_1 import launch_gui as launch_axis_angle_gui  # noqa: E402
@@ -313,7 +318,7 @@ class App(tk.Tk):
 
         type_frame = ttk.LabelFrame(self, text="Nucleic acid type", style="Bold.TLabelframe")
         type_frame.grid(row=6, column=0, columnspan=4, sticky="we", **frame_pad)
-        type_frame.grid_columnconfigure(5, weight=1)
+        type_frame.grid_columnconfigure(6, weight=1)
         self.na_type_var = tk.StringVar(value="B-DNA")
         for idx, label in enumerate(["B-DNA", "A-DNA", "A-RNA", "Z-DNA"]):
             ttk.Radiobutton(
@@ -326,12 +331,15 @@ class App(tk.Tk):
         ttk.Button(type_frame, text="B-Z builder", command=self.open_bz_builder_dialog).grid(
             row=0, column=4, sticky="w", padx=(18, 8), pady=inner_y
         )
+        ttk.Button(type_frame, text="Triplex converter", command=self.open_triplex_converter_dialog).grid(
+            row=0, column=5, sticky="w", padx=(0, 8), pady=inner_y
+        )
         ttk.Label(
             type_frame,
-            text="Join existing alternating B/Z PDBs with B-Z junction cores.",
+            text="B-Z joins alternating B/Z PDBs; triplex adds strand III to an input duplex.",
             style="Hint.TLabel",
             wraplength=430,
-        ).grid(row=0, column=5, sticky="w", padx=4, pady=inner_y)
+        ).grid(row=0, column=6, sticky="w", padx=4, pady=inner_y)
 
         self.param_frame = ttk.LabelFrame(
             self,
@@ -1016,6 +1024,258 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 run_btn.configure(state="normal")
 
         run_btn.configure(command=run_bz)
+
+    def open_triplex_converter_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("Triplex converter")
+        win.geometry("940x720+190+100")
+        win.minsize(820, 620)
+        win.transient(self)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(10, weight=1)
+
+        try:
+            out_dir = Path(self.output_dir_var.get()).expanduser()
+            if not out_dir.is_absolute():
+                out_dir = out_dir.resolve()
+        except Exception:
+            out_dir = DEFAULT_OUTPUT_DIR
+
+        duplex_var = tk.StringVar(value="")
+        out_var = tk.StringVar(value=str(out_dir / "triplex_2TH.pdb"))
+        strand_i_var = tk.StringVar(value="A")
+        range_start_var = tk.StringVar(value="1")
+        range_end_var = tk.StringVar(value="1")
+        mode_var = tk.StringVar(value="antiparallel")
+        strand_ii_var = tk.StringVar(value="")
+        strand_iii_var = tk.StringVar(value="")
+        strand_iii_start_var = tk.StringVar(value="1")
+        out_default_mode = {"value": True}
+
+        triplex_log = scrolledtext.ScrolledText(win, width=98, height=14, wrap="word")
+        try:
+            triplex_log.configure(font=("Menlo", 10))
+        except Exception:
+            triplex_log.configure(font=("Courier", 10))
+
+        def _set_dialog_log(text: str) -> None:
+            triplex_log.delete("1.0", "end")
+            triplex_log.insert("1.0", text)
+            triplex_log.see("end")
+            win.update_idletasks()
+
+        def _current_range() -> Tuple[int, int]:
+            return (
+                _parse_int_expression(range_start_var.get(), "Triplex range start"),
+                _parse_int_expression(range_end_var.get(), "Triplex range end"),
+            )
+
+        def _default_output_for_input() -> Optional[Path]:
+            text = duplex_var.get().strip()
+            if not text:
+                return None
+            try:
+                return default_triplex_output_path(text)
+            except Exception:
+                return None
+
+        def _update_default_output(force: bool = False) -> None:
+            default_out = _default_output_for_input()
+            if default_out is None:
+                return
+            current = out_var.get().strip()
+            if force or not current or out_default_mode["value"]:
+                out_var.set(str(default_out))
+                out_default_mode["value"] = True
+
+        def browse_input() -> None:
+            selected = filedialog.askopenfilename(
+                title="Choose input duplex PDB",
+                initialdir=str(out_dir),
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                duplex_var.set(selected)
+                _update_default_output(force=True)
+                refresh_info()
+
+        def browse_out() -> None:
+            _update_default_output(force=False)
+            current = Path(out_var.get().strip() or str(out_dir / "triplex_2TH.pdb")).expanduser()
+            selected = filedialog.asksaveasfilename(
+                title="Choose triplex output PDB",
+                initialdir=str(current.parent if str(current.parent) not in ("", ".") else out_dir),
+                initialfile=current.name or "triplex_2TH.pdb",
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                out_default_mode["value"] = False
+                out_var.set(selected)
+
+        def refresh_info() -> None:
+            duplex = duplex_var.get().strip()
+            if not duplex:
+                _set_dialog_log(
+                    "Choose an input duplex PDB to list detected chains and sequences.\n"
+                    "Default output naming inserts _2TH before the input file extension."
+                )
+                return
+            _update_default_output(force=False)
+            try:
+                text = describe_triplex_input(
+                    duplex,
+                    strand_i_chain=strand_i_var.get().strip(),
+                    residue_range=_current_range(),
+                    mode=mode_var.get().strip(),
+                )
+            except Exception as exc:
+                text = f"Could not read triplex input information:\n{exc}"
+            _set_dialog_log(text)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Input duplex PDB:").grid(row=0, column=0, sticky="e", **pad)
+        duplex_entry = ttk.Entry(win, textvariable=duplex_var)
+        duplex_entry.grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse/load", command=browse_input).grid(row=0, column=2, sticky="w", **pad)
+        duplex_entry.bind("<Return>", lambda *_args: refresh_info())
+        duplex_entry.bind("<FocusOut>", lambda *_args: refresh_info())
+
+        ttk.Label(win, text="Output PDB:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=out_var).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_out).grid(row=1, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Strand I purine chain:").grid(row=2, column=0, sticky="e", **pad)
+        strand_i_entry = ttk.Entry(win, textvariable=strand_i_var, width=10)
+        strand_i_entry.grid(row=2, column=1, sticky="w", **pad)
+        strand_i_entry.bind("<Return>", lambda *_args: refresh_info())
+        strand_i_entry.bind("<FocusOut>", lambda *_args: refresh_info())
+
+        range_frame = ttk.Frame(win)
+        range_frame.grid(row=3, column=1, sticky="w", **pad)
+        ttk.Label(win, text="Strand I residue range:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Entry(range_frame, textvariable=range_start_var, width=10).pack(side="left")
+        ttk.Label(range_frame, text=" to ").pack(side="left")
+        ttk.Entry(range_frame, textvariable=range_end_var, width=10).pack(side="left")
+
+        ttk.Label(win, text="Triplex mode:").grid(row=4, column=0, sticky="e", **pad)
+        mode_combo = ttk.Combobox(
+            win,
+            textvariable=mode_var,
+            values=("antiparallel", "parallel"),
+            state="readonly",
+            width=16,
+        )
+        mode_combo.grid(row=4, column=1, sticky="w", **pad)
+        mode_combo.bind("<<ComboboxSelected>>", lambda *_args: refresh_info())
+        ttk.Label(
+            win,
+            text="antiparallel = G·G-C; parallel = T·A-T.",
+            style="Hint.TLabel",
+            wraplength=460,
+        ).grid(row=4, column=1, sticky="w", padx=(170, 10), pady=4)
+
+        ttk.Label(win, text="Strand II chain (optional):").grid(row=5, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=strand_ii_var, width=10).grid(row=5, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Strand III chain (optional):").grid(row=6, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=strand_iii_var, width=10).grid(row=6, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Strand III first resSeq:").grid(row=7, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=strand_iii_start_var, width=10).grid(row=7, column=1, sticky="w", **pad)
+
+        ttk.Label(
+            win,
+            text=(
+                "Convention: triples are Z·X-Y. Strand I is the purine duplex strand X; "
+                "strand II is the Watson-Crick partner Y; strand III is the added Hoogsteen strand Z. "
+                "Only the selected strand-I range must be all G for antiparallel or all A for parallel."
+            ),
+            style="Hint.TLabel",
+            wraplength=850,
+        ).grid(row=8, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=9, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 4))
+        ttk.Button(buttons, text="Refresh strand info", command=refresh_info).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Convert to triplex")
+        run_btn.pack(side="left", padx=6)
+
+        triplex_log.grid(row=10, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+
+        def run_triplex() -> None:
+            duplex = duplex_var.get().strip()
+            _update_default_output(force=False)
+            out_text = out_var.get().strip()
+            try:
+                residue_range = _current_range()
+                strand_iii_start = _parse_int_expression(strand_iii_start_var.get(), "Strand III first resSeq")
+            except Exception as exc:
+                messagebox.showerror("Triplex converter", str(exc), parent=win)
+                return
+
+            run_btn.configure(state="disabled")
+            start_log = (
+                f"=== {APP_NAME} {__version__} triplex job started ===\n"
+                f"Input duplex PDB: {duplex}\n"
+                f"Output PDB: {out_text or '<default _2TH path>'}\n"
+                f"Mode: {mode_var.get()}\n"
+                f"Strand I: {strand_i_var.get().strip()}\n"
+                f"Residue range: {residue_range[0]}:{residue_range[1]}\n"
+            )
+            _set_dialog_log(start_log)
+            self._set_log(start_log)
+
+            try:
+                result = build_triplex_from_duplex(
+                    duplex,
+                    out_text,
+                    strand_i_chain=strand_i_var.get().strip(),
+                    residue_range=residue_range,
+                    mode=mode_var.get(),
+                    strand_ii_chain=(strand_ii_var.get().strip() or None),
+                    strand_iii_chain=(strand_iii_var.get().strip() or None),
+                    strand_iii_start_resseq=strand_iii_start,
+                )
+                pdb_out = Path(str(result["pdb_out"]))
+                remarks_log = _prepend_final_pdb_remarks(
+                    pdb_out,
+                    na_type="Triplex DNA",
+                    l_form_enabled=False,
+                    invrot_result=None,
+                )
+                full_log = "\n".join(
+                    [
+                        f"=== {APP_NAME} {__version__} triplex job summary ===",
+                        f"Triplex PDB: {pdb_out}",
+                        f"Mode: {result['mode']} ({result['motif_label']})",
+                        f"Strand I: {result['strand_i']}",
+                        f"Strand II: {result['strand_ii']}",
+                        f"Strand III: {result['strand_iii']}",
+                        "",
+                        str(result.get("log_text", "")),
+                        "",
+                        remarks_log,
+                    ]
+                )
+                _set_dialog_log(full_log)
+                self._set_log(full_log)
+                if out_var.get().strip() == "":
+                    out_var.set(str(pdb_out))
+                messagebox.showinfo("Triplex converter", f"Triplex PDB:\n{pdb_out}", parent=win)
+            except PipelineError as exc:
+                log_text = getattr(exc, "log_text", "") or str(exc)
+                _set_dialog_log(log_text)
+                self._set_log(log_text)
+                messagebox.showerror("Triplex converter", str(exc), parent=win)
+            finally:
+                run_btn.configure(state="normal")
+
+        run_btn.configure(command=run_triplex)
+        refresh_info()
 
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"
