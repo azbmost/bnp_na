@@ -58,6 +58,7 @@ import argparse
 import math
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -625,7 +626,7 @@ def run(cfg: RunConfig) -> str:
 # -----------------------------
 
 
-def launch_gui(parent=None) -> None:
+def launch_gui(parent=None, log_callback=None) -> None:
     try:
         import tkinter as tk
         from tkinter import filedialog, messagebox
@@ -817,6 +818,45 @@ def launch_gui(parent=None) -> None:
 
         text.delete("1.0", "end")
         text.insert("1.0", report)
+        if log_callback is not None:
+            cli_args = ["python3", "bnp_na_lib/angle_helical_axisV2_1.py"]
+            if pdb_path is not None:
+                cli_args.extend(["--pdb", str(pdb_path)])
+            if axis_source == "Custom axis":
+                cli_args.extend(["--axis-point", axis_point or "", "--axis-vector", axis_vector or ""])
+            else:
+                cli_args.extend(["--axis-atoms", " ".join(axis_atoms)])
+            cli_args.extend(
+                [
+                    "--point1",
+                    p1_spec,
+                    "--point2",
+                    p2_spec,
+                    "--out-bild",
+                    out,
+                    "--axis-margin",
+                    var_axis_margin.get(),
+                    "--axis-radius",
+                    var_axis_r.get(),
+                    "--vector-radius",
+                    var_vec_r.get(),
+                    "--sphere-radius",
+                    var_sph_r.get(),
+                ]
+            )
+            main_log = "\n".join(
+                [
+                    "=== Helical-axis angle tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    report,
+                ]
+            )
+            try:
+                log_callback(main_log)
+            except Exception:
+                pass
 
     frm = tk.Frame(root, padx=10, pady=10)
     frm.pack(fill="both", expand=True)

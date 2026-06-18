@@ -8,6 +8,7 @@ from __future__ import annotations
 import ast
 import math
 import re
+import shlex
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -700,7 +701,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_axis_angle_tool(self) -> None:
         try:
-            launch_axis_angle_gui(parent=self)
+            launch_axis_angle_gui(parent=self, log_callback=self._set_log)
         except Exception as exc:
             messagebox.showerror("Helical-axis angle tool", str(exc), parent=self)
 
@@ -767,6 +768,35 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             except Exception as exc:
                 messagebox.showerror("XYZ axes BILD", str(exc), parent=win)
                 return
+            cli_args = [
+                "python3",
+                "bnp_na_lib/xyz_bild.py",
+                "--out",
+                str(written),
+                "--origin",
+                " ".join(_format_number(value) for value in origin),
+                "--length",
+                _format_number(length),
+                "--width",
+                _format_number(width),
+                "--sphere-radius",
+                _format_number(sphere_radius),
+            ]
+            self._set_log(
+                "\n".join(
+                    [
+                        "=== XYZ axes BILD tool ===",
+                        "Equivalent CLI command:",
+                        "  " + " ".join(shlex.quote(part) for part in cli_args),
+                        "",
+                        f"Wrote XYZ axes BILD: {written}",
+                        f"Origin (Å): {origin[0]:.4f}, {origin[1]:.4f}, {origin[2]:.4f}",
+                        f"Arrow length (Å): {length:.4f}",
+                        f"Arrow width (Å): {width:.4f}",
+                        f"Origin sphere radius (Å): {sphere_radius:.4f}",
+                    ]
+                )
+            )
             messagebox.showinfo("XYZ axes BILD", f"Wrote:\n{written}", parent=win)
             win.destroy()
 
