@@ -158,7 +158,7 @@ def align_pdb_to_Z(
 ) -> Dict[str, object]:
     """Align a PDB to +Z and return metadata.
 
-    By default, this function runs ``x3dna-dssr -i=<input> -o=<input>-out --more``,
+    By default, this function runs ``x3dna-dssr -i=<input> -o=<input>.out --more``,
     parses DSSR ``point-one``/``point-two``, and aligns using those endpoints.
 
     ``start_point``/``end_point`` are retained only for backward-compatible manual
@@ -188,7 +188,7 @@ def align_pdb_to_Z(
         p1 = [float(x) for x in start_point]
         p2 = [float(x) for x in end_point]
     else:
-        raw_dssr_out = Path(dssr_out) if dssr_out is not None else Path(str(inp_path) + "-out")
+        raw_dssr_out = Path(dssr_out) if dssr_out is not None else Path(str(inp_path) + ".out")
         dssr_out_path = raw_dssr_out if raw_dssr_out.is_absolute() else (workdir / raw_dssr_out)
         ok_more, dssr_log, cmd = run_dssr_more_axis(inp_path, dssr_out_path, cwd=workdir)
         if not ok_more or not dssr_out_path.exists():
@@ -245,7 +245,7 @@ def parse_args() -> argparse.Namespace:
         "--dssr-output",
         dest="dssr_out",
         default=None,
-        help="Optional path for DSSR --more output. Default: <input_pdb>-out.",
+        help="Optional path for DSSR --more output. Default: <input_pdb>.out.",
     )
     parser.add_argument(
         "--cwd",
