@@ -2,6 +2,20 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.8
+
+- Renamed the main GUI's bottom `Analysis tools` area to `Other tools`.
+- Added a `Get helical-axis info` tool in `Other tools`.
+- Added `bnp_na_lib/helical_axis_info.py`, which filters a PDB to two selected chain IDs, runs `x3dna-dssr --more`, reports DSSR axis start/end points, axis vector, unit vector, and angle to a user-provided reference vector.
+- Added optional Chimera/ChimeraX `.bild` output for the selected-chain DSSR helical axis.
+- Made the helical-axis info BILD filename auto-update whenever the input PDB or chain IDs change.
+- Added start-to-end distance reporting plus an optional helix-length-in-bp field for estimating the full helix length as `distance / (bp - 1) * bp`.
+- Made chain-ID order define selected-chain helical-axis direction, so `A B` and `B A` report opposite vectors.
+- Added controls for drawing the reference vector in the BILD output and for setting its drawing length.
+- Replaced visible `Other tools` descriptions with light-blue `?` help buttons.
+- Changed `Other tools` log output to append instead of replacing previous run records.
+- Updated README usage and repository-layout documentation for the new selected-chain helical-axis info tool.
+
 ## V13.7
 
 - Added triplex conversion from an input duplex PDB using bundled `convert_to_triplex_pdbV2_1.py`.

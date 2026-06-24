@@ -1,4 +1,4 @@
-# bnp_na V13.7 updated folder
+# bnp_na V13.8 updated folder
 
 Top-level app folder contains only:
 
@@ -17,6 +17,7 @@ Top-level app folder contains only:
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_1.py` — helical-axis radial-angle calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
+- `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
 - `make_BZV2_3.py` — standalone B-Z structure builder incorporated into V13.6; combines alternating B-DNA/Z-DNA PDB inputs using B-Z junction cores.
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
 - `convert_to_triplex_pdbV2_1.py` — standalone duplex-to-triplex converter incorporated into V13.7; supports antiparallel G·G-C and parallel T·A-T triplex motifs.
@@ -28,6 +29,19 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.8 changes
+
+1. Version is `bnp_na V13.8`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. The bottom main-GUI tool area is now titled `Other tools`.
+3. A `Get helical-axis info` button is available from `Other tools`.
+4. `helical_axis_info.py` filters a PDB to two requested chain IDs, runs `x3dna-dssr --more`, and reports the DSSR axis start/end points, axis vector, unit vector, and angle to a reference vector.
+5. The selected-chain DSSR `.out` filename ends with `.out`, and optional `.bild` output can draw the selected-chain helical axis.
+6. The helical-axis info BILD filename auto-updates whenever the input PDB or chain IDs change.
+7. The report includes start-to-end distance and can estimate full helix length from an optional bp count using `distance / (bp - 1) * bp`.
+8. Chain-ID order controls the selected-chain helical-axis direction, so `A B` and `B A` report opposite vectors.
+9. The helical-axis info BILD output can omit the reference vector or draw it with a user-provided length.
+10. The `Other tools` descriptions are available through light-blue `?` help buttons, and tool logs append instead of replacing previous records.
 
 ## V13.7 changes
 

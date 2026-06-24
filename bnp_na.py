@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.7: Building and placing nucleic acid helices.
+"""bnp_na V13.8: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.7"
+__version__ = "V13.8"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,6 +42,7 @@ from build_triplex import (  # noqa: E402
 )
 from build_zdna import build_zdna  # noqa: E402
 from angle_helical_axisV2_1 import launch_gui as launch_axis_angle_gui  # noqa: E402
+from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
 from xyz_bild import write_xyz_bild  # noqa: E402
 from na_placer import PlacerError, place_after_Z  # noqa: E402
@@ -503,27 +504,33 @@ class App(tk.Tk):
             row=12, column=0, columnspan=4, sticky="we", padx=12, pady=(0, 3)
         )
 
-        tools = ttk.LabelFrame(self, text="Analysis tools", style="Bold.TLabelframe")
+        tools = ttk.LabelFrame(self, text="Other tools", style="Bold.TLabelframe")
         tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
         tools.grid_columnconfigure(3, weight=1)
         ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
             row=0, column=0, sticky="w", padx=8, pady=inner_y
         )
-        ttk.Label(
+        self._make_help_button(
             tools,
-            text="Measure around-axis angles and write .bild output.",
-            style="Hint.TLabel",
-            wraplength=330,
-        ).grid(row=0, column=1, sticky="w", padx=4, pady=inner_y)
+            "Helical-axis angle tool",
+            "Measure around-axis angles between two atom or XYZ points and write a Chimera/ChimeraX .bild drawing.",
+        ).grid(row=0, column=1, sticky="w", padx=(2, 18), pady=inner_y)
         ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
-            row=0, column=2, sticky="w", padx=(18, 8), pady=inner_y
+            row=0, column=2, sticky="w", padx=(0, 8), pady=inner_y
         )
-        ttk.Label(
+        self._make_help_button(
             tools,
-            text="Create coordinate-axis .bild helpers.",
-            style="Hint.TLabel",
-            wraplength=260,
-        ).grid(row=0, column=3, sticky="w", padx=4, pady=inner_y)
+            "XYZ axes BILD",
+            "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
+        ).grid(row=0, column=3, sticky="w", padx=2, pady=inner_y)
+        ttk.Button(tools, text="Get helical-axis info", command=self.open_helical_axis_info_dialog).grid(
+            row=1, column=0, sticky="w", padx=8, pady=inner_y
+        )
+        self._make_help_button(
+            tools,
+            "Get helical-axis info",
+            "Use DSSR on two selected PDB chains to report axis start/end points, direction, angle to a reference vector, and optional axis .bild output.",
+        ).grid(row=1, column=1, sticky="w", padx=(2, 18), pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
@@ -592,6 +599,32 @@ class App(tk.Tk):
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
         self.update_idletasks()
+
+    def _open_tool_help(self, title: str, message: str) -> None:
+        win = tk.Toplevel(self)
+        win.title(title)
+        win.geometry("520x220+260+180")
+        win.minsize(420, 180)
+        win.grid_columnconfigure(0, weight=1)
+        win.grid_rowconfigure(0, weight=1)
+        ttk.Label(win, text=message, wraplength=460, justify="left").grid(
+            row=0, column=0, sticky="nsew", padx=16, pady=16
+        )
+        ttk.Button(win, text="Close", command=win.destroy).grid(row=1, column=0, sticky="e", padx=16, pady=(0, 12))
+        win.lift()
+        win.focus_set()
+
+    def _make_help_button(self, parent: tk.Misc, title: str, message: str) -> tk.Button:
+        return tk.Button(
+            parent,
+            text="?",
+            width=2,
+            bg="#d8ecff",
+            activebackground="#b9dcff",
+            relief="raised",
+            bd=1,
+            command=lambda: self._open_tool_help(title, message),
+        )
 
     # ------------------------------------------------------------------
     # Browse / state helpers
@@ -701,9 +734,273 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_axis_angle_tool(self) -> None:
         try:
-            launch_axis_angle_gui(parent=self, log_callback=self._set_log)
+            launch_axis_angle_gui(parent=self, log_callback=self._append_log)
         except Exception as exc:
             messagebox.showerror("Helical-axis angle tool", str(exc), parent=self)
+
+    def open_helical_axis_info_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("Get helical-axis info")
+        win.geometry("820x660+220+140")
+        win.minsize(720, 580)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(7, weight=1)
+
+        def current_output_dir() -> Path:
+            text = self.output_dir_var.get().strip()
+            if not text:
+                return DEFAULT_OUTPUT_DIR
+            path = Path(text).expanduser()
+            if not path.is_absolute():
+                path = path.resolve()
+            return path
+
+        pdb_var = tk.StringVar(value="")
+        chains_var = tk.StringVar(value="C D")
+        vector_var = tk.StringVar(value="0 0 1")
+        helix_bp_var = tk.StringVar(value="")
+        write_bild_var = tk.BooleanVar(value=True)
+        draw_ref_var = tk.BooleanVar(value=True)
+        ref_length_var = tk.StringVar(value="")
+        bild_var = tk.StringVar(value="")
+        last_default_bild = {"path": ""}
+
+        def default_bild_path() -> Path:
+            pdb_text = pdb_var.get().strip()
+            stem = Path(pdb_text).expanduser().stem if pdb_text else "helical_axis"
+            if not stem:
+                stem = "helical_axis"
+            try:
+                chains = parse_chain_ids(chains_var.get())
+                chain_text = "".join(ch if ch.isalnum() else "_" for ch in chains)
+            except Exception:
+                chain_text = "chains"
+            return current_output_dir() / f"{stem}_chains_{chain_text}_axis.bild"
+
+        def refresh_default_bild(force: bool = False) -> None:
+            new_default = str(default_bild_path())
+            if force or not bild_var.get().strip() or bild_var.get() == last_default_bild["path"]:
+                bild_var.set(new_default)
+            last_default_bild["path"] = new_default
+
+        def browse_input() -> None:
+            path = filedialog.askopenfilename(
+                title="Choose PDB file",
+                initialdir=str(current_output_dir()),
+                filetypes=[("PDB files", "*.pdb *.ent"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                pdb_var.set(path)
+                refresh_default_bild(force=True)
+
+        def browse_bild() -> None:
+            path = filedialog.asksaveasfilename(
+                title="Save helical-axis BILD",
+                initialfile=Path(default_bild_path()).name,
+                defaultextension=".bild",
+                filetypes=[("BILD files", "*.bild"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                bild_var.set(path)
+
+        def parse_reference_vector() -> Optional[Tuple[float, float, float]]:
+            text = vector_var.get().strip()
+            if not text:
+                return None
+            parts = text.replace(",", " ").split()
+            if len(parts) != 3:
+                raise ValueError("Reference vector must have three numbers, for example: 0 0 1")
+            return (
+                _parse_float_expression(parts[0], "Reference vector x"),
+                _parse_float_expression(parts[1], "Reference vector y"),
+                _parse_float_expression(parts[2], "Reference vector z"),
+            )
+
+        def parse_reference_vector_length() -> Optional[float]:
+            text = ref_length_var.get().strip()
+            if not text:
+                return None
+            length = _parse_float_expression(text, "Reference-vector drawing length")
+            if length <= 0:
+                raise ValueError("Reference-vector drawing length must be positive.")
+            return length
+
+        def parse_helix_bp_count() -> Optional[int]:
+            text = helix_bp_var.get().strip()
+            if not text:
+                return None
+            bp_count = _parse_int_expression(text, "Helix length in bp")
+            if bp_count <= 1:
+                raise ValueError("Helix length in bp must be greater than 1.")
+            return bp_count
+
+        def set_result_text(text: str) -> None:
+            result_text.configure(state="normal")
+            result_text.delete("1.0", "end")
+            result_text.insert("1.0", text)
+            result_text.see("1.0")
+            result_text.configure(state="disabled")
+
+        def refresh_bild_state() -> None:
+            state = "normal" if write_bild_var.get() else "disabled"
+            bild_entry.configure(state=state)
+            bild_browse_btn.configure(state=state)
+            draw_ref_check.configure(state=state)
+            ref_length_entry.configure(state="normal" if write_bild_var.get() and draw_ref_var.get() else "disabled")
+            if write_bild_var.get():
+                refresh_default_bild()
+
+        def run_info() -> None:
+            try:
+                pdb_text = pdb_var.get().strip()
+                if not pdb_text:
+                    raise ValueError("Please choose an input PDB file.")
+                pdb_path = Path(pdb_text).expanduser()
+                if not pdb_path.is_absolute():
+                    pdb_path = pdb_path.resolve()
+                chains = parse_chain_ids(chains_var.get())
+                reference_vector = parse_reference_vector()
+                reference_vector_length = parse_reference_vector_length()
+                helix_bp_count = parse_helix_bp_count()
+                output_dir, tmp_dir = _ensure_output_dirs(self.output_dir_var.get())
+                if write_bild_var.get():
+                    bild_text = bild_var.get().strip()
+                    if not bild_text:
+                        raise ValueError("Please choose an output .bild file, or turn off BILD output.")
+                    bild_output: Optional[Path] = Path(bild_text).expanduser()
+                    if not bild_output.is_absolute():
+                        bild_output = bild_output.resolve()
+                else:
+                    bild_output = None
+
+                run_btn.configure(state="disabled")
+                win.update_idletasks()
+                info = get_helical_axis_info(
+                    pdb_path,
+                    chains,
+                    reference_vector=reference_vector,
+                    workdir=tmp_dir,
+                    bild_output=bild_output,
+                    draw_reference_vector=bool(draw_ref_var.get()),
+                    reference_vector_length=reference_vector_length,
+                    helix_bp_count=helix_bp_count,
+                )
+            except Exception as exc:
+                messagebox.showerror("Get helical-axis info", str(exc), parent=win)
+                return
+            finally:
+                try:
+                    run_btn.configure(state="normal")
+                except Exception:
+                    pass
+
+            cli_args = [
+                "python3",
+                "bnp_na_lib/helical_axis_info.py",
+                "-i",
+                str(pdb_path),
+                "--chains",
+                f"{chains[0]} {chains[1]}",
+                "--workdir",
+                str(output_dir / "tmp_file"),
+            ]
+            if reference_vector is not None:
+                cli_args.extend(["--vector", " ".join(_format_number(value) for value in reference_vector)])
+            if helix_bp_count is not None:
+                cli_args.extend(["--helix-bp", str(helix_bp_count)])
+            if bild_output is not None:
+                cli_args.extend(["--bild", str(bild_output)])
+                if not draw_ref_var.get():
+                    cli_args.append("--no-reference-vector-bild")
+                if reference_vector_length is not None:
+                    cli_args.extend(["--reference-vector-length", _format_number(reference_vector_length)])
+
+            report = format_axis_info_report(info)
+            log = "\n".join(
+                [
+                    "=== Get helical-axis info tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    report,
+                ]
+            )
+            set_result_text(report)
+            self._append_log(log)
+            if info.bild_output is not None:
+                messagebox.showinfo("Get helical-axis info", f"Wrote BILD:\n{info.bild_output}", parent=win)
+            else:
+                messagebox.showinfo("Get helical-axis info", "Helical-axis info has been written to the log.", parent=win)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Input PDB:").grid(row=0, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=pdb_var).grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_input).grid(row=0, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Chain IDs:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=chains_var, width=14).grid(row=1, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Reference vector:").grid(row=2, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=vector_var, width=18).grid(row=2, column=1, sticky="w", **pad)
+
+        ttk.Label(win, text="Helix length (bp):").grid(row=3, column=0, sticky="e", **pad)
+        helix_bp_frame = ttk.Frame(win)
+        helix_bp_frame.grid(row=3, column=1, sticky="w", **pad)
+        ttk.Entry(helix_bp_frame, textvariable=helix_bp_var, width=12).pack(side="left")
+        ttk.Label(helix_bp_frame, text="Optional, for full-length estimate", style="Hint.TLabel").pack(
+            side="left", padx=(8, 0)
+        )
+
+        ttk.Checkbutton(win, text="Write axis .bild", variable=write_bild_var, command=refresh_bild_state).grid(
+            row=4, column=0, sticky="e", **pad
+        )
+        bild_entry = ttk.Entry(win, textvariable=bild_var)
+        bild_entry.grid(row=4, column=1, sticky="we", **pad)
+        bild_browse_btn = ttk.Button(win, text="Browse", command=browse_bild)
+        bild_browse_btn.grid(row=4, column=2, sticky="w", **pad)
+
+        draw_ref_check = ttk.Checkbutton(
+            win,
+            text="Draw reference vector",
+            variable=draw_ref_var,
+            command=refresh_bild_state,
+        )
+        draw_ref_check.grid(row=5, column=0, sticky="e", **pad)
+        ref_length_frame = ttk.Frame(win)
+        ref_length_frame.grid(row=5, column=1, sticky="w", **pad)
+        ref_length_entry = ttk.Entry(ref_length_frame, textvariable=ref_length_var, width=14)
+        ref_length_entry.pack(side="left")
+        ttk.Label(ref_length_frame, text="Length (Å), blank = axis length", style="Hint.TLabel").pack(
+            side="left", padx=(8, 0)
+        )
+
+        ttk.Label(
+            win,
+            text="Selected-chain PDB and DSSR .out files are written to the selected output folder's tmp_file folder.",
+            style="Hint.TLabel",
+            wraplength=620,
+        ).grid(row=6, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
+
+        result_text = scrolledtext.ScrolledText(win, width=92, height=14, wrap="none")
+        try:
+            result_text.configure(font=("Menlo", 10))
+        except Exception:
+            result_text.configure(font=("Courier", 10))
+        result_text.grid(row=7, column=0, columnspan=3, sticky="nsew", padx=10, pady=4)
+        result_text.configure(state="disabled")
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=8, column=0, columnspan=3, sticky="e", padx=10, pady=(4, 8))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Get info", command=run_info)
+        run_btn.pack(side="left", padx=6)
+
+        refresh_default_bild(force=True)
+        pdb_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
+        chains_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
+        refresh_bild_state()
 
     def open_xyz_bild_dialog(self) -> None:
         win = tk.Toplevel(self)
@@ -782,7 +1079,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 "--sphere-radius",
                 _format_number(sphere_radius),
             ]
-            self._set_log(
+            self._append_log(
                 "\n".join(
                     [
                         "=== XYZ axes BILD tool ===",

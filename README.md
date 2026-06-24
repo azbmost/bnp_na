@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes a B-Z structure builder for joining existing B-DNA and Z-DNA PDB segments through B-Z junction cores, plus a triplex converter for adding a third strand to an input duplex PDB.
 
-The current app version is `V13.7`.
+The current app version is `V13.8`.
 
 ## What It Does
 
@@ -16,6 +16,7 @@ The current app version is `V13.7`.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
+- Reports DSSR helical-axis start/end/unit-vector information for two selected PDB chains and optionally writes an axis BILD drawing.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
 - Applies roll, phi, theta, x, y, z, and delta_z placement values.
 - Writes final PDB files to the selected output folder and intermediate files to `<output folder>/tmp_file/`.
@@ -93,11 +94,12 @@ Numeric GUI fields for DSSR helical parameters, Z-DNA helix length, placement/or
 
 At startup, the GUI checks whether `x3dna-dssr` can be found. If it reports `FOUND`, the log also records the executable path and version/help output. If it reports `NOT FOUND`, install DSSR or add it to `PATH`.
 
-The app uses DSSR for three jobs:
+The app uses DSSR for four jobs:
 
 - `rebuild` for B-DNA, A-DNA, and A-RNA.
 - `fiber --model=Z-DNA` for Z-DNA.
 - `--more` axis extraction before align-to-Z placement.
+- `--more` axis extraction for selected-chain helical-axis information in `Other tools`.
 
 ### Sequence
 
@@ -570,7 +572,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.7 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.8 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -595,11 +597,11 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 ## Helical-Axis Angle Tool
 
-`bnp_na` V13.7 includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
+`bnp_na` includes `bnp_na_lib/angle_helical_axisV2_1.py`, an analysis tool for measuring how two points sit around a helical axis. This tool does not modify the model. It calculates radial vectors from a straight helical axis to two points, reports the angle between those radial directions, and writes a Chimera/ChimeraX `.bild` drawing.
 
 The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script update. Earlier public versions used `angle_helical_axisV2.py`. V13.5 added an adjustable axis drawing margin and more explanatory `.comment` records in the generated BILD file.
 
-In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
+In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
 
 ```text
 Open helical-axis angle tool
@@ -718,16 +720,65 @@ Default drawing sizes are:
 
 The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html>.
 
+## Helical-Axis Info Tool
+
+`bnp_na` V13.8 includes `bnp_na_lib/helical_axis_info.py`, a DSSR-based tool for reporting the helical axis formed by two selected chains in a larger PDB file. The tool filters the input PDB down to the requested chain IDs, runs `x3dna-dssr --more`, and parses DSSR's first `point-one` and `point-two` axis endpoints.
+
+In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
+
+```text
+Get helical-axis info
+```
+
+The dialog asks for:
+
+- Input PDB file.
+- Two PDB chain IDs, such as `C D` or `C,D`.
+- A reference vector for angle reporting, default `0 0 1`.
+- Optional helix length in base pairs for estimating the full helix length from the DSSR endpoint distance.
+- Optional Chimera/ChimeraX `.bild` output for the helical axis.
+- Optional control for whether the reference vector is drawn in the `.bild` file, plus its drawing length.
+
+The report includes:
+
+- DSSR helical-axis start point and end point.
+- Axis vector, start-to-end distance, and normalized unit vector.
+- Reference-vector unit vector.
+- Unsigned angle from `0` to `180` degrees between the DSSR axis direction and the reference vector.
+- A note that the start-to-end distance spans the start and end base-pair centers, so it is approximately one base-pair step shorter than the full helix length.
+- If helix length is provided as `n` bp, an estimated full helix length using `distance / (n - 1) * n`.
+- Paths for the selected-chain PDB, DSSR `.out` file, and optional BILD output.
+
+The order of the two chain IDs defines the reported axis direction. For example, `A B` and `B A` report opposite axis vectors and opposite unit vectors for the same duplex.
+
+The selected-chain PDB and DSSR `.out` file are written to the selected output folder's `tmp_file/` folder. The DSSR output filename ends with `.out`, for example:
+
+```text
+model_chains_CD_dssr_more.out
+```
+
+You can also run it directly:
+
+```bash
+python3 bnp_na_lib/helical_axis_info.py -i model.pdb \
+  --chains "C D" \
+  --vector "0 0 1" \
+  --helix-bp 24 \
+  --workdir output/tmp_file \
+  --bild model_chains_CD_axis.bild \
+  --reference-vector-length 20
+```
+
 ## XYZ Axes BILD Tool
 
-`bnp_na` V13.7 includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
+`bnp_na` includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
 
 - A sphere at the origin.
 - A red X-axis arrow.
 - A yellow Y-axis arrow.
 - A blue Z-axis arrow.
 
-In the main `bnp_na` GUI, use the `Analysis tools` section near the bottom, immediately above `Log output`, and click:
+In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
 
 ```text
 Write XYZ axes BILD
@@ -926,6 +977,7 @@ bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/angle_helical_axisV2_1.py Helical-axis radial-angle calculator and BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
 bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter
+bnp_na_lib/helical_axis_info.py DSSR selected-chain helical-axis reporter and BILD writer
 bnp_na_lib/make_BZV2_3.py   Standalone B-Z structure builder CLI/GUI
 bnp_na_lib/core_BZ.py       Bundled B-Z junction core structure data
 bnp_na_lib/convert_to_triplex_pdbV2_1.py Standalone duplex-to-triplex converter CLI/GUI
