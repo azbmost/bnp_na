@@ -12,6 +12,8 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 - Added start-to-end distance reporting plus an optional helix-length-in-bp field for estimating the full helix length as `distance / (bp - 1) * bp`.
 - Made chain-ID order define selected-chain helical-axis direction, so `A B` and `B A` report opposite vectors.
 - Added controls for drawing the reference vector in the BILD output and for setting its drawing length.
+- Added an `Align helix to z` tool in `Other tools` for applying the existing DSSR `align2z.py` workflow to any input helix PDB.
+- Renamed `Open helical-axis angle tool` to `Measure angle around axis` and arranged all `Other tools` launchers on one row.
 - Replaced visible `Other tools` descriptions with light-blue `?` help buttons.
 - Changed `Other tools` log output to append instead of replacing previous run records.
 - Updated README usage and repository-layout documentation for the new selected-chain helical-axis info tool.

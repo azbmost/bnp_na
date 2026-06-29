@@ -41,6 +41,7 @@ from build_triplex import (  # noqa: E402
     describe_triplex_input,
 )
 from build_zdna import build_zdna  # noqa: E402
+from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
 from angle_helical_axisV2_1 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
@@ -344,9 +345,9 @@ class App(tk.Tk):
         )
         ttk.Label(
             type_frame,
-            text="Add strand III to a duplex PDB.",
+            text="Add strand III; tune X-disp (e.g. -1.9 Å) and h-Twist (e.g. 30°) first.",
             style="Hint.TLabel",
-            wraplength=180,
+            wraplength=310,
         ).grid(row=0, column=7, sticky="w", padx=4, pady=inner_y)
 
         self.param_frame = ttk.LabelFrame(
@@ -506,31 +507,39 @@ class App(tk.Tk):
 
         tools = ttk.LabelFrame(self, text="Other tools", style="Bold.TLabelframe")
         tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
-        tools.grid_columnconfigure(3, weight=1)
-        ttk.Button(tools, text="Open helical-axis angle tool", command=self.open_axis_angle_tool).grid(
-            row=0, column=0, sticky="w", padx=8, pady=inner_y
+        tools.grid_columnconfigure(8, weight=1)
+        ttk.Button(tools, text="Measure angle around axis", command=self.open_axis_angle_tool).grid(
+            row=0, column=0, sticky="w", padx=(8, 4), pady=inner_y
         )
         self._make_help_button(
             tools,
-            "Helical-axis angle tool",
+            "Measure angle around axis",
             "Measure around-axis angles between two atom or XYZ points and write a Chimera/ChimeraX .bild drawing.",
-        ).grid(row=0, column=1, sticky="w", padx=(2, 18), pady=inner_y)
-        ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
-            row=0, column=2, sticky="w", padx=(0, 8), pady=inner_y
+        ).grid(row=0, column=1, sticky="w", padx=(0, 10), pady=inner_y)
+        ttk.Button(tools, text="Align helix to z", command=self.open_align_to_z_dialog).grid(
+            row=0, column=2, sticky="w", padx=(0, 4), pady=inner_y
         )
         self._make_help_button(
             tools,
-            "XYZ axes BILD",
-            "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
-        ).grid(row=0, column=3, sticky="w", padx=2, pady=inner_y)
+            "Align helix to z",
+            "Use DSSR --more axis endpoints to rotate and translate any helix PDB so its axis is aligned with the coordinate-system +Z axis.",
+        ).grid(row=0, column=3, sticky="w", padx=(0, 10), pady=inner_y)
         ttk.Button(tools, text="Get helical-axis info", command=self.open_helical_axis_info_dialog).grid(
-            row=1, column=0, sticky="w", padx=8, pady=inner_y
+            row=0, column=4, sticky="w", padx=(0, 4), pady=inner_y
         )
         self._make_help_button(
             tools,
             "Get helical-axis info",
             "Use DSSR on two selected PDB chains to report axis start/end points, direction, angle to a reference vector, and optional axis .bild output.",
-        ).grid(row=1, column=1, sticky="w", padx=(2, 18), pady=inner_y)
+        ).grid(row=0, column=5, sticky="w", padx=(0, 10), pady=inner_y)
+        ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
+            row=0, column=6, sticky="w", padx=(0, 4), pady=inner_y
+        )
+        self._make_help_button(
+            tools,
+            "XYZ axes BILD",
+            "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
+        ).grid(row=0, column=7, sticky="w", padx=(0, 8), pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
@@ -737,6 +746,202 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             launch_axis_angle_gui(parent=self, log_callback=self._append_log)
         except Exception as exc:
             messagebox.showerror("Helical-axis angle tool", str(exc), parent=self)
+
+    def open_align_to_z_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        win.title("Align helix to z")
+        win.geometry("760x360+240+160")
+        win.minsize(680, 320)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(4, weight=1)
+
+        def current_output_dir() -> Path:
+            text = self.output_dir_var.get().strip()
+            if not text:
+                return DEFAULT_OUTPUT_DIR
+            path = Path(text).expanduser()
+            if not path.is_absolute():
+                path = path.resolve()
+            return path
+
+        input_var = tk.StringVar(value="")
+        output_var = tk.StringVar(value="")
+        dssr_out_var = tk.StringVar(value="")
+        last_default_output = {"path": ""}
+        last_default_dssr = {"path": ""}
+
+        def default_paths() -> Tuple[Path, Path]:
+            pdb_text = input_var.get().strip()
+            stem = Path(pdb_text).expanduser().stem if pdb_text else "helix"
+            if not stem:
+                stem = "helix"
+            output_dir = current_output_dir()
+            tmp_dir = output_dir / "tmp_file"
+            return output_dir / f"{stem}_aligned2Z.pdb", tmp_dir / f"{stem}_align2z_dssr_more.out"
+
+        def refresh_default_paths(force: bool = False) -> None:
+            default_output, default_dssr = default_paths()
+            default_output_text = str(default_output)
+            default_dssr_text = str(default_dssr)
+            if force or not output_var.get().strip() or output_var.get() == last_default_output["path"]:
+                output_var.set(default_output_text)
+            if force or not dssr_out_var.get().strip() or dssr_out_var.get() == last_default_dssr["path"]:
+                dssr_out_var.set(default_dssr_text)
+            last_default_output["path"] = default_output_text
+            last_default_dssr["path"] = default_dssr_text
+
+        def browse_input() -> None:
+            path = filedialog.askopenfilename(
+                title="Choose helix PDB",
+                initialdir=str(current_output_dir()),
+                filetypes=[("PDB files", "*.pdb *.ent"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                input_var.set(path)
+                refresh_default_paths(force=True)
+
+        def browse_output() -> None:
+            current = Path(output_var.get().strip() or str(default_paths()[0])).expanduser()
+            path = filedialog.asksaveasfilename(
+                title="Save aligned PDB",
+                initialdir=str(current.parent if current.parent else current_output_dir()),
+                initialfile=current.name or "helix_aligned2Z.pdb",
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                output_var.set(path)
+
+        def browse_dssr_output() -> None:
+            current = Path(dssr_out_var.get().strip() or str(default_paths()[1])).expanduser()
+            path = filedialog.asksaveasfilename(
+                title="Save DSSR --more output",
+                initialdir=str(current.parent if current.parent else current_output_dir()),
+                initialfile=current.name or "align2z_dssr_more.out",
+                defaultextension=".out",
+                filetypes=[("DSSR output", "*.out"), ("Text files", "*.txt"), ("All files", "*.*")],
+                parent=win,
+            )
+            if path:
+                dssr_out_var.set(path)
+
+        def set_result_text(text: str) -> None:
+            result_text.configure(state="normal")
+            result_text.delete("1.0", "end")
+            result_text.insert("1.0", text)
+            result_text.see("1.0")
+            result_text.configure(state="disabled")
+
+        def run_alignment() -> None:
+            try:
+                input_text = input_var.get().strip()
+                if not input_text:
+                    raise ValueError("Please choose an input PDB file.")
+                input_path = Path(input_text).expanduser()
+                if not input_path.is_absolute():
+                    input_path = input_path.resolve()
+                if not input_path.exists():
+                    raise ValueError(f"Input PDB not found: {input_path}")
+
+                output_text = output_var.get().strip()
+                if not output_text:
+                    raise ValueError("Please choose an aligned output PDB file.")
+                output_path = Path(output_text).expanduser()
+                if not output_path.is_absolute():
+                    output_path = output_path.resolve()
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                dssr_text = dssr_out_var.get().strip()
+                if not dssr_text:
+                    raise ValueError("Please choose a DSSR .out file.")
+                dssr_out_path = Path(dssr_text).expanduser()
+                if not dssr_out_path.is_absolute():
+                    dssr_out_path = dssr_out_path.resolve()
+                if dssr_out_path.suffix.lower() != ".out":
+                    raise ValueError("The DSSR output filename should end with .out.")
+                dssr_out_path.parent.mkdir(parents=True, exist_ok=True)
+
+                _output_dir, tmp_dir = _ensure_output_dirs(self.output_dir_var.get())
+                run_btn.configure(state="disabled")
+                win.update_idletasks()
+                result = align_pdb_to_Z(
+                    str(input_path),
+                    out_pdb=str(output_path),
+                    dssr_out=str(dssr_out_path),
+                    cwd=tmp_dir,
+                )
+            except Exception as exc:
+                messagebox.showerror("Align helix to z", str(exc), parent=win)
+                return
+            finally:
+                try:
+                    run_btn.configure(state="normal")
+                except Exception:
+                    pass
+
+            cli_args = [
+                "python3",
+                "bnp_na_lib/align2z.py",
+                str(input_path),
+                "-o",
+                str(output_path),
+                "--dssr-output",
+                str(dssr_out_path),
+                "--cwd",
+                str(tmp_dir),
+            ]
+            report = format_alignment_report(result)
+            log = "\n".join(
+                [
+                    "=== Align helix to z tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    report,
+                ]
+            )
+            set_result_text(report)
+            self._append_log(log)
+            messagebox.showinfo("Align helix to z", f"Aligned PDB:\n{output_path}", parent=win)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Input PDB:").grid(row=0, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=input_var).grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_input).grid(row=0, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Aligned output PDB:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=output_var).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_output).grid(row=1, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="DSSR .out:").grid(row=2, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=dssr_out_var).grid(row=2, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_dssr_output).grid(row=2, column=2, sticky="w", **pad)
+
+        ttk.Label(
+            win,
+            text="Uses DSSR --more point-one/point-two endpoints, then translates point-one to the origin and rotates the axis to +Z.",
+            style="Hint.TLabel",
+            wraplength=620,
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
+
+        result_text = scrolledtext.ScrolledText(win, width=88, height=9, wrap="none")
+        try:
+            result_text.configure(font=("Menlo", 10))
+        except Exception:
+            result_text.configure(font=("Courier", 10))
+        result_text.grid(row=4, column=0, columnspan=3, sticky="nsew", padx=10, pady=4)
+        result_text.configure(state="disabled")
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=5, column=0, columnspan=3, sticky="e", padx=10, pady=(4, 8))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Align to z", command=run_alignment)
+        run_btn.pack(side="left", padx=6)
+
+        refresh_default_paths(force=True)
+        input_var.trace_add("write", lambda *_args: refresh_default_paths())
 
     def open_helical_axis_info_dialog(self) -> None:
         win = tk.Toplevel(self)

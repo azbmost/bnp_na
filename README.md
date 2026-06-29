@@ -12,6 +12,7 @@ The current app version is `V13.8`.
 - Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
+- Aligns any input helix PDB to +Z from `Other tools`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
@@ -100,6 +101,7 @@ The app uses DSSR for four jobs:
 - `fiber --model=Z-DNA` for Z-DNA.
 - `--more` axis extraction before align-to-Z placement.
 - `--more` axis extraction for selected-chain helical-axis information in `Other tools`.
+- `--more` axis extraction for the standalone `Align helix to z` tool in `Other tools`.
 
 ### Sequence
 
@@ -604,7 +606,7 @@ The bundled filename is `angle_helical_axisV2_1.py` to indicate the V2.1 script 
 In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
 
 ```text
-Open helical-axis angle tool
+Measure angle around axis
 ```
 
 This opens the angle tool in a separate window.
@@ -719,6 +721,18 @@ Default drawing sizes are:
 `--axis-margin` is in Angstrom. It controls how far the displayed axis arrow extends beyond the selected fitted range or the two custom-axis reference points. It changes only the BILD drawing length, not the fitted axis, custom axis, radial vectors, or reported angle. Increase it when the axis arrow looks too short in Chimera/ChimeraX; decrease it when the arrow visually dominates a small local measurement.
 
 The PCA/SVD axis fit uses `numpy.linalg.svd`; NumPy's SVD reference is here: <https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html>.
+
+## Align Helix To Z Tool
+
+`bnp_na` V13.8 includes an `Align helix to z` button in the main GUI's `Other tools` section. This tool reads an existing helix PDB, runs `x3dna-dssr --more` to obtain DSSR `point-one` and `point-two` axis endpoints, translates `point-one` to the origin, and rotates the helix axis onto the coordinate-system +Z axis.
+
+The dialog asks for:
+
+- Input PDB file.
+- Aligned output PDB file.
+- DSSR `.out` file for the `--more` report.
+
+The tool appends the equivalent `bnp_na_lib/align2z.py` CLI command and alignment report to the main log.
 
 ## Helical-Axis Info Tool
 

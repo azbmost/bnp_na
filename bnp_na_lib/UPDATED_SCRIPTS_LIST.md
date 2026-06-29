@@ -41,7 +41,9 @@ Top-level app folder contains only:
 7. The report includes start-to-end distance and can estimate full helix length from an optional bp count using `distance / (bp - 1) * bp`.
 8. Chain-ID order controls the selected-chain helical-axis direction, so `A B` and `B A` report opposite vectors.
 9. The helical-axis info BILD output can omit the reference vector or draw it with a user-provided length.
-10. The `Other tools` descriptions are available through light-blue `?` help buttons, and tool logs append instead of replacing previous records.
+10. An `Align helix to z` button is available from `Other tools` and uses the existing DSSR `align2z.py` workflow on any input helix PDB.
+11. The helical-axis angle launcher is now named `Measure angle around axis`, and all `Other tools` launchers are arranged on one row.
+12. The `Other tools` descriptions are available through light-blue `?` help buttons, and tool logs append instead of replacing previous records.
 
 ## V13.7 changes
 
