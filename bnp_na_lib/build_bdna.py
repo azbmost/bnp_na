@@ -18,6 +18,7 @@ from build_common import (
     command_to_text,
     expected_phenix_minimized_path,
     expand_sequence,
+    helical_repeat_rebuild_tag,
     sanitize_basename,
     sequence_alphabet,
     stage_params_to_output_dir,
@@ -72,7 +73,8 @@ def build_bdna(
         raise PipelineError("Invalid helix name after sanitization.")
 
     par_file = out_dir / f"{base}.txt"
-    pdb_rebuild = out_dir / f"{base}-rb10.5.pdb"
+    rebuild_tag = helical_repeat_rebuild_tag(BACKBONE, param_overrides)
+    pdb_rebuild = out_dir / f"{base}-{rebuild_tag}.pdb"
 
     try:
         table_path, seq_expanded = write_helical_table(
@@ -100,7 +102,7 @@ def build_bdna(
     if not ok_dssr or not pdb_rebuild.exists():
         raise PipelineError("DSSR rebuild failed.", "\n".join(logs))
 
-    pdb_norm_target = out_dir / f"{base}-rb10.5_out.pdb"
+    pdb_norm_target = out_dir / f"{base}-{rebuild_tag}_out.pdb"
     try:
         pdb_norm = Path(
             normalize_nucleotide_pdb_naming(

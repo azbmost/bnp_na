@@ -901,6 +901,11 @@ dssr-helices.pdb
 dssr-pairs.pdb
 ```
 
+For B-DNA, the `rb` number in intermediate filenames is the helical repeat
+computed from the effective twist parameter: `360 / h-Twist`, rounded to at
+most two decimal places. With the default B-DNA `h-Twist = 34.2857`, this is
+`rb10.5`; with `h-Twist = 30`, future generated files use `rb12`.
+
 Not every file appears for every run. For example, minimized files appear only when Phenix minimization is enabled.
 
 The final placed model is written outside `tmp_file/`:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import subprocess
 from pathlib import Path
@@ -171,6 +172,38 @@ def get_default_params(na_type: str) -> List[float]:
     if na_type not in DEFAULT_PARAMS:
         raise ValueError(f"No default parameters defined for {na_type}.")
     return list(DEFAULT_PARAMS[na_type])
+
+
+def effective_param_value(
+    na_type: str,
+    key: str,
+    param_overrides: Optional[Dict[str, float]] = None,
+) -> float:
+    if key not in PARAM_KEYS:
+        raise ValueError(f"Unsupported parameter key: {key}")
+    values = get_default_params(na_type)
+    value = values[PARAM_KEYS.index(key)]
+    if param_overrides and key in param_overrides:
+        value = float(param_overrides[key])
+    return float(value)
+
+
+def helical_repeat_rebuild_tag(
+    na_type: str,
+    param_overrides: Optional[Dict[str, float]] = None,
+) -> str:
+    """Return an rb tag such as rb10.5 or rb12 from 360 / h-Twist.
+
+    The number is rounded to at most two decimal places to keep filenames short
+    while preserving the historical meaning of B-DNA ``rb10.5``.
+    """
+    h_twist = effective_param_value(na_type, "h-Twist", param_overrides)
+    if not math.isfinite(h_twist) or abs(h_twist) <= 1e-12:
+        return "rb"
+    repeat = 360.0 / h_twist
+    rounded = Decimal(str(repeat)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    text = format(rounded, "f").rstrip("0").rstrip(".")
+    return f"rb{text}"
 
 
 def pair_tag_for_base(base: str, na_type: str) -> str:
