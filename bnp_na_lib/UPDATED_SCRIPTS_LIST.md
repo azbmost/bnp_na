@@ -16,7 +16,7 @@ Top-level app folder contains only:
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
-- `angle_helical_axisV2_1.py` — helical-axis radial-angle calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
+- `angle_helical_axisV2_2.py` — helical-axis radial-angle and 2-fold symmetry-axis calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
 - `make_BZV2_3.py` — standalone B-Z structure builder incorporated into V13.6; combines alternating B-DNA/Z-DNA PDB inputs using B-Z junction cores.
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
@@ -56,9 +56,9 @@ Top-level app folder contains only:
 7. Version is `bnp_na V13.7`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
 8. Sequence length is updated in the GUI after sequence input changes.
 9. Optional mirror-image L-form generation is available after align-to-Z and before final orient/place, using `pdb_inv_rotV2.py` i-mode and o-mode operations.
-10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2_1.py`.
-11. The helical-axis angle tool filename now indicates the incorporated V2.1 script version; earlier public versions used `angle_helical_axisV2.py`.
-12. The helical-axis angle tool includes an axis drawing margin control and explanatory BILD `.comment` records.
+10. A helical-axis angle tool is available from the main GUI and can also be run directly as `bnp_na_lib/angle_helical_axisV2_2.py`.
+11. The helical-axis angle tool filename now indicates the incorporated V2.2 script version; earlier public versions used `angle_helical_axisV2.py` and `angle_helical_axisV2_1.py`.
+12. The helical-axis angle tool includes an axis drawing margin control, opt-in region/whole-model 2-fold symmetry-axis output, and explanatory BILD `.comment` records.
 13. An XYZ axes BILD writer is available from the main GUI and can also be run directly as `bnp_na_lib/xyz_bild.py`.
 14. A B-Z structure builder is available from the main GUI and can also be run directly as `bnp_na_lib/make_BZV2_3.py`.
 15. The B-Z builder uses bundled `core_BZ.py` junction data and writes final/raw PDB outputs with captured logs in the main app.

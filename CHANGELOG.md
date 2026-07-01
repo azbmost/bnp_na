@@ -17,6 +17,11 @@ This file records the public GitHub-ready `bnp_na` version history from the repo
 - Replaced visible `Other tools` descriptions with light-blue `?` help buttons.
 - Changed `Other tools` log output to append instead of replacing previous run records.
 - Updated README usage and repository-layout documentation for the new selected-chain helical-axis info tool.
+- Renamed the bundled helical-axis angle tool to `bnp_na_lib/angle_helical_axisV2_2.py`.
+- Added optional region-defined 2-fold symmetry-axis calculation to the helical-axis angle tool, including symmetry-axis points, +90-degree rotated points, RMSD reporting, GUI controls, CLI flags, and BILD output.
+- Made 2-fold symmetry output opt-in with GUI radio buttons, disabled non-relevant symmetry fields by default, allowed blank symmetry regions to use the whole two-chain model, and added BILD arrow color/direction notes to the output report.
+- Changed the helical-axis angle tool window from a transient child dialog to a normal top-level tool window to avoid disappearing when moved between displays.
+- Set the default 2-fold symmetry point radius to `15.0 Å` in both the GUI and CLI.
 
 ## V13.7
 

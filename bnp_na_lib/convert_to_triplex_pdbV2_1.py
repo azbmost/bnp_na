@@ -930,6 +930,13 @@ def run_gui() -> None:
         ) from exc
 
     root = tk.Tk()
+    icon_path = Path(__file__).resolve().parents[1] / "assets" / "bnp_na_icon.png"
+    if icon_path.exists():
+        try:
+            root._bnp_na_window_icon = tk.PhotoImage(file=str(icon_path))
+            root.iconphoto(True, root._bnp_na_window_icon)
+        except Exception:
+            pass
     root.title("convert_to_triplex_pdbV2_1")
     root.geometry("1000x760")
     root.minsize(940, 680)

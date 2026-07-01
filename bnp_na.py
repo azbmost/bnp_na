@@ -42,7 +42,7 @@ from build_triplex import (  # noqa: E402
 )
 from build_zdna import build_zdna  # noqa: E402
 from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
-from angle_helical_axisV2_1 import launch_gui as launch_axis_angle_gui  # noqa: E402
+from angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
 from xyz_bild import write_xyz_bild  # noqa: E402
@@ -574,12 +574,29 @@ class App(tk.Tk):
         self._set_log(f"=== {APP_NAME} {__version__} startup ===\nApp folder: {APP_DIR}\nHelper folder: {LIB_DIR}\n")
         self.after(100, self.check_dssr_on_startup)
 
-    def _set_optional_window_icon(self) -> None:
+    def _get_optional_window_icon(self) -> Optional[tk.PhotoImage]:
+        icon = getattr(self, "_window_icon", None)
+        if icon is not None:
+            return icon
+        if getattr(self, "_window_icon_unavailable", False):
+            return None
         if not DEFAULT_ICON_FILE.exists():
-            return
+            self._window_icon_unavailable = True
+            return None
         try:
             self._window_icon = tk.PhotoImage(file=str(DEFAULT_ICON_FILE))
-            self.iconphoto(True, self._window_icon)
+            return self._window_icon
+        except tk.TclError:
+            self._window_icon_unavailable = True
+            return None
+
+    def _set_optional_window_icon(self, window: Optional[tk.Misc] = None) -> None:
+        target = window or self
+        icon = self._get_optional_window_icon()
+        if icon is None:
+            return
+        try:
+            target.iconphoto(target is self, icon)
         except tk.TclError:
             pass
 
@@ -611,6 +628,7 @@ class App(tk.Tk):
 
     def _open_tool_help(self, title: str, message: str) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title(title)
         win.geometry("520x220+260+180")
         win.minsize(420, 180)
@@ -692,6 +710,7 @@ class App(tk.Tk):
 
     def open_invrot_help(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("L-form inv/rot help")
         win.geometry("760x520+220+140")
         win.minsize(680, 460)
@@ -749,6 +768,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_align_to_z_dialog(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("Align helix to z")
         win.geometry("760x360+240+160")
         win.minsize(680, 320)
@@ -945,6 +965,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_helical_axis_info_dialog(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("Get helical-axis info")
         win.geometry("820x660+220+140")
         win.minsize(720, 580)
@@ -1209,6 +1230,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_xyz_bild_dialog(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("Write XYZ axes BILD")
         win.geometry("620x260+240+180")
         win.minsize(560, 240)
@@ -1333,6 +1355,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_bz_builder_dialog(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("B-Z structure builder")
         win.geometry("900x720+180+100")
         win.minsize(760, 620)
@@ -1571,6 +1594,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
     def open_triplex_converter_dialog(self) -> None:
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title("Triplex converter")
         win.geometry("940x720+190+100")
         win.minsize(820, 620)
@@ -1923,6 +1947,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             return
 
         win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
         win.title(f"Customize DSSR parameters — {na_type}")
         win.geometry("960x500+180+120")
         win.minsize(860, 430)

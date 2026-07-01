@@ -2091,6 +2091,14 @@ def launch_gui() -> None:
         print("Use CLI mode instead, e.g.: python make_BZV2_3.py --axis-mode codirectional --out multi_BZ.pdb B1.pdb Z1.pdb")
         return
 
+    icon_path = Path(__file__).resolve().parents[1] / "assets" / "bnp_na_icon.png"
+    if icon_path.exists():
+        try:
+            root._bnp_na_window_icon = tk.PhotoImage(file=str(icon_path))
+            root.iconphoto(True, root._bnp_na_window_icon)
+        except Exception:
+            pass
+
     root.title("make_BZ - B/Z junction builder")
 
     dna_files_var = tk.StringVar()
