@@ -2,7 +2,7 @@
 """A-RNA builder for bnp_na.
 
 Pipeline: write DSSR helical-parameter table -> DSSR rebuild with
---backbone=A-RNA --par-type=heli -> normalize PDB naming -> optional
+--backbone=RNA --par-type=heli -> normalize PDB naming -> optional
 phenix.geometry_minimization -> DSSR --more axis extraction -> align to +Z.
 """
 from __future__ import annotations
@@ -29,6 +29,7 @@ from pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_n
 
 
 BACKBONE = "A-RNA"
+DSSR_BACKBONE = "RNA"
 
 TEMPLATES = {
     base: (tag, list(DEFAULT_PARAMS[BACKBONE]))
@@ -88,7 +89,7 @@ def build_arna(
     except Exception as exc:
         raise PipelineError(f"Failed to write helical table: {exc}", "\n".join(logs)) from exc
 
-    ok_dssr, out_dssr, cmd_dssr = run_dssr_rebuild(par_file, pdb_rebuild, cwd=out_dir, backbone=BACKBONE)
+    ok_dssr, out_dssr, cmd_dssr = run_dssr_rebuild(par_file, pdb_rebuild, cwd=out_dir, backbone=DSSR_BACKBONE)
     logs += [
         "\n=== DSSR rebuild ===",
         f"Command: (cwd={out_dir}) {command_to_text(cmd_dssr)}",

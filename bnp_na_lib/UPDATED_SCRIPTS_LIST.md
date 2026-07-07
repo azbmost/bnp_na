@@ -1,4 +1,4 @@
-# bnp_na V13.8 updated folder
+# bnp_na V13.9 updated folder
 
 Top-level app folder contains only:
 
@@ -11,10 +11,11 @@ Top-level app folder contains only:
 - `build_common.py` — shared sequence expansion, DSSR rebuild/fiber wrappers, DSSR installation check, helical table writer, phenix.geometry_minimization wrapper, default 12-parameter rows.
 - `build_bdna.py` — B-DNA builder using `x3dna-dssr rebuild --backbone=B-DNA --par-type=heli`; optional phenix.geometry_minimization; DSSR-based align-to-Z.
 - `build_adna.py` — A-DNA builder using `x3dna-dssr rebuild --backbone=A-DNA --par-type=heli`; optional phenix.geometry_minimization; no twist warp.
-- `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=A-RNA --par-type=heli`; optional phenix.geometry_minimization.
+- `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=RNA --par-type=heli`; optional phenix.geometry_minimization.
 - `build_zdna.py` — Z-DNA builder using DSSR fiber; no phenix.geometry_minimization option.
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
+- `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_2.py` — helical-axis radial-angle and 2-fold symmetry-axis calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
@@ -29,6 +30,15 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.9 changes
+
+1. Version is `bnp_na V13.9`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. An `Add phosphates` button is available from `Other tools`.
+3. `add_phosphates.py` reports whether each chain has a first-residue 5' phosphate and a terminal phosphate-only 3' residue.
+4. The tool can add selected missing 5' and/or 3' phosphates to selected chains using neighboring residue sugar-atom fits.
+5. Add-phosphates outputs are renumbered in file order, and existing `CONECT` records are remapped to the new serials.
+6. A-RNA DSSR rebuild now uses `--backbone=RNA`, preserving RNA sugar `O2'` atoms.
 
 ## V13.8 changes
 

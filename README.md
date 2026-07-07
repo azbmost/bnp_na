@@ -1,8 +1,8 @@
 # bnp_na
 
-`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes a B-Z structure builder for joining existing B-DNA and Z-DNA PDB segments through B-Z junction cores, plus a triplex converter for adding a third strand to an input duplex PDB.
+`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.8`.
+The current app version is `V13.9`.
 
 ## What It Does
 
@@ -16,6 +16,7 @@ The current app version is `V13.8`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
+- Reports and adds missing 5' and 3' terminal phosphates from `Other tools`.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Reports DSSR helical-axis start/end/unit-vector information for two selected PDB chains and optionally writes an axis BILD drawing.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
@@ -95,7 +96,7 @@ Numeric GUI fields for DSSR helical parameters, Z-DNA helix length, placement/or
 
 At startup, the GUI checks whether `x3dna-dssr` can be found. If it reports `FOUND`, the log also records the executable path and version/help output. If it reports `NOT FOUND`, install DSSR or add it to `PATH`.
 
-The app uses DSSR for four jobs:
+The app uses DSSR for these jobs:
 
 - `rebuild` for B-DNA, A-DNA, and A-RNA.
 - `fiber --model=Z-DNA` for Z-DNA.
@@ -172,7 +173,7 @@ A-DNA defaults to skipping `phenix.geometry_minimization`, but you can enable it
 A-RNA is built with:
 
 ```text
-x3dna-dssr rebuild --backbone=A-RNA --par-type=heli
+x3dna-dssr rebuild --backbone=RNA --par-type=heli
 ```
 
 A-RNA uses `U`, not `T`, in the input sequence. It defaults to skipping `phenix.geometry_minimization`, but you can enable it.
@@ -574,7 +575,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.8 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.9 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -835,6 +836,36 @@ python3 bnp_na_lib/helical_axis_info.py -i model.pdb \
   --reference-vector-length 20
 ```
 
+## Add Phosphates Tool
+
+`bnp_na` V13.9 includes an `Add phosphates` button in the main GUI's `Other tools` section. This tool reads an existing nucleic-acid PDB, reports whether each chain has terminal 5' and 3' phosphates, and can add selected missing phosphates to selected chains.
+
+The dialog asks for:
+
+- Input PDB file.
+- Output PDB file.
+- Optional chain IDs; blank means all detected chains.
+- Whether to add missing 5' phosphates, missing 3' phosphates, or both.
+
+The report treats a chain's 5' phosphate as present when the first nucleotide residue has `P`, `OP1`, and `OP2`. It treats a 3' phosphate as present when a phosphate-only terminal residue follows the last nucleotide residue.
+
+Placement uses local neighbor geometry:
+
+- For a missing 5' phosphate, the tool fits the second residue sugar atoms onto the first residue sugar atoms, then transforms the second residue's `P/OP1/OP2` onto the first residue.
+- For a missing 3' phosphate, the tool fits the penultimate residue sugar atoms onto the terminal residue sugar atoms, then transforms the terminal residue's `P/OP1/OP2` into a phosphate-only `N+1` residue. The new residue uses the same residue name as the terminal nucleotide.
+
+The output PDB is renumbered in file order after insertion. Existing `CONECT` records are remapped to the new atom serials.
+
+You can also run it directly:
+
+```bash
+python3 bnp_na_lib/add_phosphates.py model.pdb --report-only
+python3 bnp_na_lib/add_phosphates.py model.pdb \
+  -o model_add_phosphates.pdb \
+  --chains "A B" \
+  --ends both
+```
+
 ## XYZ Axes BILD Tool
 
 `bnp_na` includes `bnp_na_lib/xyz_bild.py`, a small utility for writing a coordinate-axis `.bild` file for Chimera or ChimeraX. It draws:
@@ -1045,6 +1076,7 @@ The GUI checks for `assets/bnp_na_icon.png` at startup and continues normally if
 bnp_na.py                  Main GUI/controller
 CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
+bnp_na_lib/add_phosphates.py Terminal phosphate reporter and placement helper
 bnp_na_lib/angle_helical_axisV2_2.py Helical-axis radial-angle and 2-fold symmetry-axis BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
 bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter

@@ -2,6 +2,15 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.9
+
+- Added an `Add phosphates` tool in `Other tools` for reporting and adding missing 5' and 3' terminal phosphates by chain.
+- Added `bnp_na_lib/add_phosphates.py`, with a direct CLI and reusable helper API for terminal phosphate status reports and neighbor-geometry phosphate placement.
+- The 5' addition fits the second residue sugar onto the first residue sugar, then transforms the second residue's `P/OP1/OP2` onto the first residue.
+- The 3' addition fits the penultimate residue sugar onto the terminal residue sugar, then transforms the terminal residue's `P/OP1/OP2` into a phosphate-only `N+1` residue using the terminal residue name.
+- Phosphate-added PDB outputs are renumbered in file order, with existing `CONECT` records remapped to the new atom serials.
+- Corrected the A-RNA DSSR rebuild command to use `--backbone=RNA` instead of `--backbone=A-RNA`, preserving RNA `O2'` atoms in the rebuilt PDB.
+
 ## V13.8
 
 - Renamed the main GUI's bottom `Analysis tools` area to `Other tools`.

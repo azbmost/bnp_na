@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.8: Building and placing nucleic acid helices.
+"""bnp_na V13.9: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.8"
+__version__ = "V13.9"
 APP_NAME = "bnp_na"
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,6 +42,13 @@ from build_triplex import (  # noqa: E402
 )
 from build_zdna import build_zdna  # noqa: E402
 from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
+from add_phosphates import (  # noqa: E402
+    add_terminal_phosphates,
+    analyze_phosphate_termini,
+    default_add_phosphate_output_path,
+    format_phosphate_report,
+    parse_chain_selection,
+)
 from angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
 from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
@@ -507,7 +514,7 @@ class App(tk.Tk):
 
         tools = ttk.LabelFrame(self, text="Other tools", style="Bold.TLabelframe")
         tools.grid(row=13, column=0, columnspan=4, sticky="we", **frame_pad)
-        tools.grid_columnconfigure(8, weight=1)
+        tools.grid_columnconfigure(10, weight=1)
         ttk.Button(tools, text="Measure angle around axis", command=self.open_axis_angle_tool).grid(
             row=0, column=0, sticky="w", padx=(8, 4), pady=inner_y
         )
@@ -532,14 +539,22 @@ class App(tk.Tk):
             "Get helical-axis info",
             "Use DSSR on two selected PDB chains to report axis start/end points, direction, angle to a reference vector, and optional axis .bild output.",
         ).grid(row=0, column=5, sticky="w", padx=(0, 10), pady=inner_y)
-        ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
+        ttk.Button(tools, text="Add phosphates", command=self.open_add_phosphates_dialog).grid(
             row=0, column=6, sticky="w", padx=(0, 4), pady=inner_y
+        )
+        self._make_help_button(
+            tools,
+            "Add phosphates",
+            "Report missing 5' and 3' terminal phosphates by chain, then add selected missing terminal phosphate groups by borrowing neighboring residue geometry.",
+        ).grid(row=0, column=7, sticky="w", padx=(0, 10), pady=inner_y)
+        ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
+            row=0, column=8, sticky="w", padx=(0, 4), pady=inner_y
         )
         self._make_help_button(
             tools,
             "XYZ axes BILD",
             "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
-        ).grid(row=0, column=7, sticky="w", padx=(0, 8), pady=inner_y)
+        ).grid(row=0, column=9, sticky="w", padx=(0, 8), pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
@@ -1227,6 +1242,216 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         pdb_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
         chains_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
         refresh_bild_state()
+
+    def open_add_phosphates_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
+        win.title("Add phosphates")
+        win.geometry("900x620+220+130")
+        win.minsize(760, 540)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(5, weight=1)
+
+        def current_output_dir() -> Path:
+            text = self.output_dir_var.get().strip()
+            if not text:
+                return DEFAULT_OUTPUT_DIR
+            path = Path(text).expanduser()
+            if not path.is_absolute():
+                path = path.resolve()
+            return path
+
+        input_var = tk.StringVar(value="")
+        output_var = tk.StringVar(value="")
+        chains_var = tk.StringVar(value="")
+        add_5_var = tk.BooleanVar(value=True)
+        add_3_var = tk.BooleanVar(value=True)
+        last_default_output = {"path": ""}
+
+        def default_output_path() -> Path:
+            input_text = input_var.get().strip()
+            if input_text:
+                try:
+                    return default_add_phosphate_output_path(Path(input_text).expanduser())
+                except Exception:
+                    pass
+            return current_output_dir() / "add_phosphates_out.pdb"
+
+        def refresh_default_output(force: bool = False) -> None:
+            default_path = default_output_path()
+            default_text = str(default_path)
+            current = output_var.get().strip()
+            if force or not current or current == last_default_output["path"]:
+                output_var.set(default_text)
+            last_default_output["path"] = default_text
+
+        def set_dialog_log(text: str) -> None:
+            result_text.configure(state="normal")
+            result_text.delete("1.0", "end")
+            result_text.insert("1.0", text)
+            result_text.see("1.0")
+            result_text.configure(state="disabled")
+            win.update_idletasks()
+
+        def refresh_info() -> None:
+            pdb_text = input_var.get().strip()
+            if not pdb_text:
+                set_dialog_log("Choose an input PDB to list terminal phosphate status by chain.")
+                return
+            refresh_default_output()
+            try:
+                pdb_path = Path(pdb_text).expanduser()
+                if not pdb_path.is_absolute():
+                    pdb_path = pdb_path.resolve()
+                statuses = analyze_phosphate_termini(pdb_path)
+                set_dialog_log(format_phosphate_report(statuses))
+            except Exception as exc:
+                set_dialog_log(f"Could not read terminal phosphate status:\n{exc}")
+
+        def browse_input() -> None:
+            selected = filedialog.askopenfilename(
+                title="Choose input PDB",
+                initialdir=str(current_output_dir()),
+                filetypes=[("PDB files", "*.pdb *.ent"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                input_var.set(selected)
+                refresh_default_output(force=True)
+                refresh_info()
+
+        def browse_output() -> None:
+            refresh_default_output()
+            current = Path(output_var.get().strip() or str(default_output_path())).expanduser()
+            selected = filedialog.asksaveasfilename(
+                title="Save phosphate-added PDB",
+                initialdir=str(current.parent if str(current.parent) not in ("", ".") else current_output_dir()),
+                initialfile=current.name or "add_phosphates_out.pdb",
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                output_var.set(selected)
+
+        def ends_arg() -> str:
+            add_5 = bool(add_5_var.get())
+            add_3 = bool(add_3_var.get())
+            if add_5 and add_3:
+                return "both"
+            if add_5:
+                return "5"
+            if add_3:
+                return "3"
+            raise ValueError("Select at least one end to add: 5' and/or 3'.")
+
+        def run_add_phosphates() -> None:
+            try:
+                input_text = input_var.get().strip()
+                if not input_text:
+                    raise ValueError("Please choose an input PDB file.")
+                input_path = Path(input_text).expanduser()
+                if not input_path.is_absolute():
+                    input_path = input_path.resolve()
+                if not input_path.exists():
+                    raise ValueError(f"Input PDB not found: {input_path}")
+
+                refresh_default_output()
+                output_text = output_var.get().strip()
+                if not output_text:
+                    raise ValueError("Please choose an output PDB file.")
+                output_path = Path(output_text).expanduser()
+                if not output_path.is_absolute():
+                    output_path = output_path.resolve()
+
+                selected_chains = parse_chain_selection(chains_var.get())
+                end_text = ends_arg()
+                add_5 = end_text in ("both", "5")
+                add_3 = end_text in ("both", "3")
+
+                run_btn.configure(state="disabled")
+                win.update_idletasks()
+                result = add_terminal_phosphates(
+                    input_path,
+                    output_path,
+                    chain_ids=selected_chains,
+                    add_5prime=add_5,
+                    add_3prime=add_3,
+                )
+            except Exception as exc:
+                messagebox.showerror("Add phosphates", str(exc), parent=win)
+                return
+            finally:
+                try:
+                    run_btn.configure(state="normal")
+                except Exception:
+                    pass
+
+            cli_args = [
+                "python3",
+                "bnp_na_lib/add_phosphates.py",
+                str(input_path),
+                "-o",
+                str(output_path),
+                "--ends",
+                end_text,
+            ]
+            if selected_chains:
+                cli_args.extend(["--chains", chains_var.get().strip()])
+            log = "\n".join(
+                [
+                    "=== Add phosphates tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    result.log_text,
+                ]
+            )
+            set_dialog_log(result.log_text)
+            self._append_log(log)
+            messagebox.showinfo("Add phosphates", f"Wrote:\n{result.output_pdb}", parent=win)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Input PDB:").grid(row=0, column=0, sticky="e", **pad)
+        input_entry = ttk.Entry(win, textvariable=input_var)
+        input_entry.grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse/load", command=browse_input).grid(row=0, column=2, sticky="w", **pad)
+        input_entry.bind("<Return>", lambda *_args: refresh_info())
+        input_entry.bind("<FocusOut>", lambda *_args: refresh_info())
+
+        ttk.Label(win, text="Output PDB:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=output_var).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_output).grid(row=1, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Chain IDs:").grid(row=2, column=0, sticky="e", **pad)
+        chain_frame = ttk.Frame(win)
+        chain_frame.grid(row=2, column=1, sticky="w", **pad)
+        ttk.Entry(chain_frame, textvariable=chains_var, width=18).pack(side="left")
+        ttk.Label(chain_frame, text="Blank = all chains", style="Hint.TLabel").pack(side="left", padx=(8, 0))
+
+        ends_frame = ttk.Frame(win)
+        ends_frame.grid(row=3, column=1, sticky="w", **pad)
+        ttk.Label(win, text="Add ends:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Checkbutton(ends_frame, text="5' phosphates", variable=add_5_var).pack(side="left", padx=(0, 14))
+        ttk.Checkbutton(ends_frame, text="3' phosphates", variable=add_3_var).pack(side="left")
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=4, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 6))
+        ttk.Button(buttons, text="Refresh info", command=refresh_info).pack(side="left", padx=6)
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Add phosphates", command=run_add_phosphates)
+        run_btn.pack(side="left", padx=6)
+
+        result_text = scrolledtext.ScrolledText(win, width=96, height=18, wrap="none")
+        try:
+            result_text.configure(font=("Menlo", 10))
+        except Exception:
+            result_text.configure(font=("Courier", 10))
+        result_text.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+        result_text.configure(state="disabled")
+
+        refresh_default_output(force=True)
+        refresh_info()
 
     def open_xyz_bild_dialog(self) -> None:
         win = tk.Toplevel(self)
