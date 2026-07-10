@@ -10,13 +10,20 @@ import math
 import re
 import shlex
 import sys
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Dict, Optional, Tuple
 
 __version__ = "V13.9"
 APP_NAME = "bnp_na"
+
+# Answer -v/--version before importing the GUI toolkit so that
+# `python3 bnp_na.py --version` works even on systems without tkinter.
+if __name__ == "__main__" and any(arg in ("-v", "--version") for arg in sys.argv[1:]):
+    print(f"{APP_NAME} {__version__}")
+    sys.exit(0)
+
+import tkinter as tk  # noqa: E402
+from tkinter import filedialog, messagebox, scrolledtext, ttk  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent
 LIB_DIR = APP_DIR / "bnp_na_lib"
