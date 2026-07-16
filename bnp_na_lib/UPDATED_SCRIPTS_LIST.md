@@ -1,4 +1,4 @@
-# bnp_na V13.9 updated folder
+# bnp_na V13.10 updated folder
 
 Top-level app folder contains only:
 
@@ -30,6 +30,14 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.10 changes
+
+1. Version is `bnp_na V13.10`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. The `Add phosphates` dialog now has an optional `O3' before 5' phosphate` checkbox.
+3. `add_phosphates.py` reports this preceding atom separately and can add it to an existing or newly generated 5' phosphate.
+4. For a 5' phosphate on residue `n`, the new `O3'` is written in a one-atom residue `n-1` using the first nucleotide's residue name.
+5. The CLI exposes the same behavior through `--add-5prime-o3`; use `--ends none` when adding only this atom.
 
 ## V13.9 changes
 

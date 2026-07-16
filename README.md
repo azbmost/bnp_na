@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.9`.
+The current app version is `V13.10`.
 
 ## What It Does
 
@@ -16,7 +16,7 @@ The current app version is `V13.9`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
-- Reports and adds missing 5' and 3' terminal phosphates from `Other tools`.
+- Reports and adds missing 5' and 3' terminal phosphates, with optional preceding 5'-terminal `O3'` atoms, from `Other tools`.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Reports DSSR helical-axis start/end/unit-vector information for two selected PDB chains and optionally writes an axis BILD drawing.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
@@ -575,7 +575,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.9 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.10 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -838,7 +838,7 @@ python3 bnp_na_lib/helical_axis_info.py -i model.pdb \
 
 ## Add Phosphates Tool
 
-`bnp_na` V13.9 includes an `Add phosphates` button in the main GUI's `Other tools` section. This tool reads an existing nucleic-acid PDB, reports whether each chain has terminal 5' and 3' phosphates, and can add selected missing phosphates to selected chains.
+`bnp_na` V13.10 includes an `Add phosphates` button in the main GUI's `Other tools` section. This tool reads an existing nucleic-acid PDB, reports whether each chain has terminal 5' and 3' phosphates and a preceding 5'-terminal `O3'`, and can add selected missing atoms to selected chains.
 
 The dialog asks for:
 
@@ -846,12 +846,14 @@ The dialog asks for:
 - Output PDB file.
 - Optional chain IDs; blank means all detected chains.
 - Whether to add missing 5' phosphates, missing 3' phosphates, or both.
+- Whether to add an `O3'` atom before each selected chain's existing or newly added 5' phosphate.
 
-The report treats a chain's 5' phosphate as present when the first nucleotide residue has `P`, `OP1`, and `OP2`. It treats a 3' phosphate as present when a phosphate-only terminal residue follows the last nucleotide residue.
+The report treats a chain's 5' phosphate as present when the first nucleotide residue has `P`, `OP1`, and `OP2`. The preceding `O3'` is reported separately and belongs to a one-atom residue `n-1` when the 5' phosphate belongs to residue `n`. A 3' phosphate is present when a phosphate-only terminal residue follows the last nucleotide residue.
 
 Placement uses local neighbor geometry:
 
 - For a missing 5' phosphate, the tool fits the second residue sugar atoms onto the first residue sugar atoms, then transforms the second residue's `P/OP1/OP2` onto the first residue.
+- When adding `O3'` with a new 5' phosphate, the tool applies that same fit to the first residue's donor `O3'`. For an existing 5' phosphate, it fits the neighboring phosphate frame onto the existing phosphate first. The resulting atom is assigned to residue `n-1` with the first nucleotide's residue name.
 - For a missing 3' phosphate, the tool fits the penultimate residue sugar atoms onto the terminal residue sugar atoms, then transforms the terminal residue's `P/OP1/OP2` into a phosphate-only `N+1` residue. The new residue uses the same residue name as the terminal nucleotide.
 
 The output PDB is renumbered in file order after insertion. Existing `CONECT` records are remapped to the new atom serials.
@@ -863,7 +865,8 @@ python3 bnp_na_lib/add_phosphates.py model.pdb --report-only
 python3 bnp_na_lib/add_phosphates.py model.pdb \
   -o model_add_phosphates.pdb \
   --chains "A B" \
-  --ends both
+  --ends both \
+  --add-5prime-o3
 ```
 
 ## XYZ Axes BILD Tool

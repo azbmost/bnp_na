@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.9: Building and placing nucleic acid helices.
+"""bnp_na V13.10: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-__version__ = "V13.9"
+__version__ = "V13.10"
 APP_NAME = "bnp_na"
 
 # Answer -v/--version before importing the GUI toolkit so that
@@ -552,7 +552,7 @@ class App(tk.Tk):
         self._make_help_button(
             tools,
             "Add phosphates",
-            "Report missing 5' and 3' terminal phosphates by chain, then add selected missing terminal phosphate groups by borrowing neighboring residue geometry.",
+            "Report and add terminal 5' and 3' phosphates by chain, with an option to add the O3' atom in residue n-1 before a 5' phosphate on residue n.",
         ).grid(row=0, column=7, sticky="w", padx=(0, 10), pady=inner_y)
         ttk.Button(tools, text="Write XYZ axes BILD", command=self.open_xyz_bild_dialog).grid(
             row=0, column=8, sticky="w", padx=(0, 4), pady=inner_y
@@ -1273,6 +1273,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         chains_var = tk.StringVar(value="")
         add_5_var = tk.BooleanVar(value=True)
         add_3_var = tk.BooleanVar(value=True)
+        add_5_o3_var = tk.BooleanVar(value=False)
         last_default_output = {"path": ""}
 
         def default_output_path() -> Path:
@@ -1350,7 +1351,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 return "5"
             if add_3:
                 return "3"
-            raise ValueError("Select at least one end to add: 5' and/or 3'.")
+            return "none"
 
         def run_add_phosphates() -> None:
             try:
@@ -1375,6 +1376,11 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 end_text = ends_arg()
                 add_5 = end_text in ("both", "5")
                 add_3 = end_text in ("both", "3")
+                add_5_o3 = bool(add_5_o3_var.get())
+                if not add_5 and not add_3 and not add_5_o3:
+                    raise ValueError(
+                        "Select at least one item to add: 5' phosphate, 3' phosphate, or preceding O3'."
+                    )
 
                 run_btn.configure(state="disabled")
                 win.update_idletasks()
@@ -1384,6 +1390,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     chain_ids=selected_chains,
                     add_5prime=add_5,
                     add_3prime=add_3,
+                    add_5prime_o3=add_5_o3,
                 )
             except Exception as exc:
                 messagebox.showerror("Add phosphates", str(exc), parent=win)
@@ -1405,6 +1412,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             ]
             if selected_chains:
                 cli_args.extend(["--chains", chains_var.get().strip()])
+            if add_5_o3:
+                cli_args.append("--add-5prime-o3")
             log = "\n".join(
                 [
                     "=== Add phosphates tool ===",
@@ -1438,9 +1447,10 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         ends_frame = ttk.Frame(win)
         ends_frame.grid(row=3, column=1, sticky="w", **pad)
-        ttk.Label(win, text="Add ends:").grid(row=3, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Add:").grid(row=3, column=0, sticky="e", **pad)
         ttk.Checkbutton(ends_frame, text="5' phosphates", variable=add_5_var).pack(side="left", padx=(0, 14))
-        ttk.Checkbutton(ends_frame, text="3' phosphates", variable=add_3_var).pack(side="left")
+        ttk.Checkbutton(ends_frame, text="3' phosphates", variable=add_3_var).pack(side="left", padx=(0, 14))
+        ttk.Checkbutton(ends_frame, text="O3' before 5' phosphate", variable=add_5_o3_var).pack(side="left")
 
         buttons = ttk.Frame(win)
         buttons.grid(row=4, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 6))

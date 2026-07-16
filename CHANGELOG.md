@@ -2,6 +2,13 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.10
+
+- Added an optional `O3' before 5' phosphate` mode to the Add phosphates tool and its CLI.
+- The tool reports the preceding `O3'` status separately for each chain and writes the atom as a one-atom residue `n-1` before the 5' phosphate on residue `n`.
+- A new `O3'` can be added alongside a newly generated 5' phosphate or onto an existing 5' phosphate using neighboring backbone geometry.
+- Add-phosphates provenance now reports phosphate-group and preceding-`O3'` additions separately while retaining file-order atom renumbering.
+
 ## V13.9
 
 - Added an `Add phosphates` tool in `Other tools` for reporting and adding missing 5' and 3' terminal phosphates by chain.

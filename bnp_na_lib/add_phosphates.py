@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add missing terminal phosphate groups to nucleic-acid PDB chains."""
+"""Add missing terminal phosphate groups and their preceding O3' atoms."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 
 
-TOOL_VERSION = "V13.9"
+TOOL_VERSION = "V13.10"
 
 
 class AddPhosphateError(Exception):
@@ -26,6 +26,7 @@ PHOSPHATE_ALIASES = {
     "O2P": "OP2",
 }
 PHOSPHATE_ATOMS = ("P", "OP1", "OP2")
+PHOSPHATE_FRAME_ATOMS = PHOSPHATE_ATOMS + ("O5'",)
 SUGAR_ALIGN_ATOMS = ("C1'", "C2'", "C3'", "C4'", "C5'", "O3'", "O4'", "O5'")
 SUGAR_MARKER_ATOMS = set(SUGAR_ALIGN_ATOMS) | {"O2'"}
 
@@ -81,7 +82,16 @@ class Residue:
 
     def is_nucleotide(self) -> bool:
         atoms = self.atom_by_name()
-        return any(name in atoms for name in SUGAR_MARKER_ATOMS)
+        return not self.is_o3prime_only() and any(name in atoms for name in SUGAR_MARKER_ATOMS)
+
+    def is_o3prime_only(self) -> bool:
+        atoms = self.atom_by_name()
+        other_sugar_atoms = SUGAR_MARKER_ATOMS - {"O3'"}
+        return (
+            "O3'" in atoms
+            and not any(name in atoms for name in other_sugar_atoms)
+            and not self.has_complete_phosphate()
+        )
 
     def is_phosphate_only(self) -> bool:
         atoms = self.atom_by_name()
@@ -95,8 +105,10 @@ class ChainPhosphateStatus:
     first_residue: Optional[str]
     last_residue: Optional[str]
     has_5prime_phosphate: bool
+    has_5prime_o3: bool
     has_3prime_phosphate: bool
     can_add_5prime: bool
+    can_add_5prime_o3: bool
     can_add_3prime: bool
     notes: List[str] = field(default_factory=list)
 
@@ -191,10 +203,15 @@ def _max_pdb_record_serial(lines: Sequence[str]) -> int:
     return max_serial
 
 
-def _insert_provenance_remark(lines: List[str], added_count: int) -> List[str]:
-    if added_count <= 0:
+def _insert_provenance_remark(lines: List[str], phosphate_count: int, o3_count: int) -> List[str]:
+    if phosphate_count <= 0 and o3_count <= 0:
         return lines
-    remark = f"REMARK BNP_NA_ADD_PHOSPHATES bnp_na {TOOL_VERSION} added {added_count} terminal phosphate group(s).\n"
+    additions: List[str] = []
+    if phosphate_count:
+        additions.append(f"{phosphate_count} terminal phosphate group(s)")
+    if o3_count:
+        additions.append(f"{o3_count} preceding O3' atom(s)")
+    remark = f"REMARK BNP_NA_ADD_PHOSPHATES bnp_na {TOOL_VERSION} added {' and '.join(additions)}.\n"
     if remark in lines:
         return lines
     insert_at = 0
@@ -277,6 +294,16 @@ def _terminal_3prime_phosphate_residue(chain_residues: Sequence[Residue], last_n
     return None
 
 
+def _terminal_5prime_o3_residue(chain_residues: Sequence[Residue], first_nt: Residue) -> Optional[Residue]:
+    expected_resseq = first_nt.resseq - 1
+    for residue in chain_residues:
+        if residue.first_index >= first_nt.first_index:
+            continue
+        if residue.resseq == expected_resseq and "O3'" in residue.atom_by_name():
+            return residue
+    return None
+
+
 def _common_sugar_atom_names(source: Residue, target: Residue) -> List[str]:
     source_atoms = source.atom_by_name()
     target_atoms = target.atom_by_name()
@@ -285,6 +312,16 @@ def _common_sugar_atom_names(source: Residue, target: Residue) -> List[str]:
 
 def _can_fit(source: Residue, target: Residue) -> bool:
     return len(_common_sugar_atom_names(source, target)) >= 3
+
+
+def _common_phosphate_frame_atom_names(source: Residue, target: Residue) -> List[str]:
+    source_atoms = source.atom_by_name()
+    target_atoms = target.atom_by_name()
+    return [name for name in PHOSPHATE_FRAME_ATOMS if name in source_atoms and name in target_atoms]
+
+
+def _can_fit_phosphate_frame(source: Residue, target: Residue) -> bool:
+    return len(_common_phosphate_frame_atom_names(source, target)) >= 3
 
 
 def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> ChainPhosphateStatus:
@@ -297,8 +334,10 @@ def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> Chain
             first_residue=None,
             last_residue=None,
             has_5prime_phosphate=False,
+            has_5prime_o3=False,
             has_3prime_phosphate=False,
             can_add_5prime=False,
+            can_add_5prime_o3=False,
             can_add_3prime=False,
             notes=["No nucleotide residues with sugar atoms were detected."],
         )
@@ -306,8 +345,10 @@ def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> Chain
     first = nts[0]
     last = nts[-1]
     has_5 = first.has_complete_phosphate()
+    has_5_o3 = _terminal_5prime_o3_residue(chain_residues, first) is not None
     has_3 = _terminal_3prime_phosphate_residue(chain_residues, last) is not None
     can_add_5 = False
+    can_add_5_o3 = False
     can_add_3 = False
 
     if len(nts) < 2:
@@ -316,6 +357,12 @@ def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> Chain
         second = nts[1]
         previous = nts[-2]
         can_add_5 = (not has_5) and second.has_complete_phosphate() and _can_fit(second, first)
+        first_o3 = first.atom_by_name().get("O3'")
+        if not has_5_o3 and first_o3 is not None:
+            if has_5:
+                can_add_5_o3 = second.has_complete_phosphate() and _can_fit_phosphate_frame(second, first)
+            else:
+                can_add_5_o3 = can_add_5
         can_add_3 = (not has_3) and last.has_complete_phosphate() and _can_fit(previous, last)
         if not has_5 and not second.has_complete_phosphate():
             notes.append(f"Cannot add 5' phosphate: neighbor {_residue_label(second)} lacks P/OP1/OP2.")
@@ -323,6 +370,12 @@ def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> Chain
             notes.append(f"Cannot add 3' phosphate: terminal {_residue_label(last)} lacks P/OP1/OP2.")
         if not has_5 and second.has_complete_phosphate() and not _can_fit(second, first):
             notes.append("Cannot add 5' phosphate: first two residues share fewer than three sugar alignment atoms.")
+        if not has_5_o3 and first_o3 is None:
+            notes.append("Cannot add preceding O3': the first nucleotide lacks a donor O3' atom.")
+        elif not has_5_o3 and has_5 and not can_add_5_o3:
+            notes.append("Cannot add preceding O3': the first two residues lack a compatible phosphate frame.")
+        elif not has_5_o3 and not has_5 and can_add_5_o3:
+            notes.append("The preceding O3' can be added together with the missing 5' phosphate.")
         if not has_3 and last.has_complete_phosphate() and not _can_fit(previous, last):
             notes.append("Cannot add 3' phosphate: last two residues share fewer than three sugar alignment atoms.")
 
@@ -332,8 +385,10 @@ def _status_for_chain(chain_id: str, chain_residues: Sequence[Residue]) -> Chain
         first_residue=_residue_label(first),
         last_residue=_residue_label(last),
         has_5prime_phosphate=has_5,
+        has_5prime_o3=has_5_o3,
         has_3prime_phosphate=has_3,
         can_add_5prime=can_add_5,
+        can_add_5prime_o3=can_add_5_o3,
         can_add_3prime=can_add_3,
         notes=notes,
     )
@@ -361,6 +416,11 @@ def format_phosphate_report(statuses: Sequence[ChainPhosphateStatus]) -> str:
             "  5' phosphate  : "
             + ("present" if status.has_5prime_phosphate else "missing")
             + ("; can add" if status.can_add_5prime else "")
+        )
+        lines.append(
+            "  Preceding O3' : "
+            + ("present" if status.has_5prime_o3 else "missing")
+            + ("; can add" if status.can_add_5prime_o3 else "")
         )
         lines.append(
             "  3' phosphate  : "
@@ -420,6 +480,21 @@ def _fit_residue_sugars(source: Residue, target: Residue) -> Tuple[np.ndarray, n
     if len(names) < 3:
         raise AddPhosphateError(
             f"Residues {_residue_label(source)} and {_residue_label(target)} share fewer than three sugar atoms."
+        )
+    source_atoms = source.atom_by_name()
+    target_atoms = target.atom_by_name()
+    source_points = np.array([source_atoms[name].xyz for name in names], dtype=float)
+    target_points = np.array([target_atoms[name].xyz for name in names], dtype=float)
+    rotation, translation, rmsd = _fit_transform(source_points, target_points)
+    return rotation, translation, rmsd, names
+
+
+def _fit_phosphate_frames(source: Residue, target: Residue) -> Tuple[np.ndarray, np.ndarray, float, List[str]]:
+    names = _common_phosphate_frame_atom_names(source, target)
+    if len(names) < 3:
+        raise AddPhosphateError(
+            f"Residues {_residue_label(source)} and {_residue_label(target)} share fewer than three "
+            "phosphate-frame atoms."
         )
     source_atoms = source.atom_by_name()
     target_atoms = target.atom_by_name()
@@ -501,6 +576,17 @@ def _next_resseq(last: Residue, chain_residues: Sequence[Residue]) -> int:
     return candidate
 
 
+def _previous_resseq(first: Residue, chain_residues: Sequence[Residue]) -> int:
+    candidate = first.resseq - 1
+    occupied = {(residue.resseq, residue.icode.strip()) for residue in chain_residues}
+    if (candidate, "") in occupied:
+        raise AddPhosphateError(
+            f"Cannot create preceding O3' residue before {_residue_label(first)}: "
+            f"residue number {candidate} already exists."
+        )
+    return candidate
+
+
 def _new_phosphate_lines(
     donor_atoms: Dict[str, AtomRecord],
     *,
@@ -529,6 +615,27 @@ def _new_phosphate_lines(
     return lines
 
 
+def _new_5prime_o3_line(
+    donor: AtomRecord,
+    *,
+    rotation: np.ndarray,
+    translation: np.ndarray,
+    serial: int,
+    target_residue: Residue,
+    target_resseq: int,
+) -> str:
+    return _updated_atom_line(
+        donor,
+        serial=serial,
+        atom_name="O3'",
+        resname=target_residue.resname,
+        chain=target_residue.chain,
+        resseq=target_resseq,
+        icode=" ",
+        xyz=_transform_xyz(donor.xyz, rotation, translation),
+    )
+
+
 def add_terminal_phosphates(
     input_pdb: Union[Path, str],
     output_pdb: Union[Path, str],
@@ -536,10 +643,11 @@ def add_terminal_phosphates(
     chain_ids: Optional[Sequence[str]] = None,
     add_5prime: bool = True,
     add_3prime: bool = True,
+    add_5prime_o3: bool = False,
 ) -> PhosphateAdditionResult:
-    """Add selected missing 5' and/or 3' terminal phosphates to selected chains."""
-    if not add_5prime and not add_3prime:
-        raise AddPhosphateError("Select at least one end to add: 5' and/or 3'.")
+    """Add selected terminal phosphates and optionally the O3' preceding a 5' phosphate."""
+    if not add_5prime and not add_3prime and not add_5prime_o3:
+        raise AddPhosphateError("Select at least one item to add: 5' phosphate, 3' phosphate, or preceding O3'.")
     input_path = Path(input_pdb).expanduser()
     output_path = Path(output_pdb).expanduser()
     lines, atoms, _residues, chains = _read_pdb(input_path)
@@ -555,6 +663,8 @@ def add_terminal_phosphates(
     after_insertions: Dict[int, List[str]] = {}
     added: List[str] = []
     skipped: List[str] = []
+    phosphate_added_count = 0
+    o3_added_count = 0
     next_serial = max(max(atom.serial for atom in atoms), _max_pdb_record_serial(lines)) + 1
 
     for chain_id in selected_chains:
@@ -567,9 +677,11 @@ def add_terminal_phosphates(
         second = nts[1]
         previous = nts[-2]
         last = nts[-1]
+        five_prime_transform: Optional[Tuple[np.ndarray, np.ndarray, float, List[str]]] = None
+        five_prime_present = first.has_complete_phosphate()
 
         if add_5prime:
-            if first.has_complete_phosphate():
+            if five_prime_present:
                 skipped.append(f"Chain {_chain_display(chain_id)} 5': already present.")
             else:
                 donor_phosphate = second.phosphate_atoms()
@@ -586,10 +698,52 @@ def add_terminal_phosphates(
                     )
                     next_serial += len(new_lines)
                     before_insertions.setdefault(first.first_index, []).extend(new_lines)
+                    five_prime_transform = (rotation, translation, rmsd, names)
+                    five_prime_present = True
+                    phosphate_added_count += 1
                     added.append(
                         f"Chain {_chain_display(chain_id)} 5': added P/OP1/OP2 to {_residue_label(first)} "
                         f"from {_residue_label(second)} after sugar fit RMSD {rmsd:.4f} A "
                         f"({', '.join(names)})."
+                    )
+
+        if add_5prime_o3:
+            existing_o3 = _terminal_5prime_o3_residue(chain_residues, first)
+            if existing_o3 is not None:
+                skipped.append(
+                    f"Chain {_chain_display(chain_id)} preceding O3': already present in {_residue_label(existing_o3)}."
+                )
+            elif not five_prime_present:
+                skipped.append(
+                    f"Chain {_chain_display(chain_id)} preceding O3': requires an existing or newly added 5' phosphate."
+                )
+            else:
+                donor_o3 = first.atom_by_name().get("O3'")
+                if donor_o3 is None:
+                    skipped.append(f"Chain {_chain_display(chain_id)} preceding O3': first nucleotide lacks O3'.")
+                else:
+                    if five_prime_transform is None:
+                        rotation, translation, rmsd, names = _fit_phosphate_frames(second, first)
+                        fit_description = "phosphate-frame fit"
+                    else:
+                        rotation, translation, rmsd, names = five_prime_transform
+                        fit_description = "sugar fit used for the new 5' phosphate"
+                    new_resseq = _previous_resseq(first, chain_residues)
+                    new_line = _new_5prime_o3_line(
+                        donor_o3,
+                        rotation=rotation,
+                        translation=translation,
+                        serial=next_serial,
+                        target_residue=first,
+                        target_resseq=new_resseq,
+                    )
+                    next_serial += 1
+                    before_insertions.setdefault(first.first_index, []).insert(0, new_line)
+                    o3_added_count += 1
+                    added.append(
+                        f"Chain {_chain_display(chain_id)} 5': added O3' as "
+                        f"{_chain_display(chain_id)}:{first.resname}{new_resseq}, preceding {_residue_label(first)}, "
+                        f"after {fit_description} RMSD {rmsd:.4f} A ({', '.join(names)})."
                     )
 
         if add_3prime:
@@ -612,6 +766,7 @@ def add_terminal_phosphates(
                     )
                     next_serial += len(new_lines)
                     after_insertions.setdefault(last.last_index, []).extend(new_lines)
+                    phosphate_added_count += 1
                     added.append(
                         f"Chain {_chain_display(chain_id)} 3': added phosphate-only residue "
                         f"{_chain_display(chain_id)}:{last.resname}{new_resseq} from {_residue_label(last)} "
@@ -625,7 +780,7 @@ def add_terminal_phosphates(
         out_lines.extend(before_insertions.get(index, []))
         out_lines.append(line)
         out_lines.extend(after_insertions.get(index, []))
-    out_lines = _insert_provenance_remark(out_lines, len(added))
+    out_lines = _insert_provenance_remark(out_lines, phosphate_added_count, o3_added_count)
     out_lines = _renumber_pdb_records(out_lines)
     output_path.write_text("".join(out_lines), encoding="utf-8")
 
@@ -665,17 +820,26 @@ def _ends_from_text(text: str) -> Tuple[bool, bool]:
         return True, False
     if value in {"3", "3prime", "3'", "three"}:
         return False, True
-    raise AddPhosphateError("--ends must be one of: both, 5, 3")
+    if value in {"none", "neither"}:
+        return False, False
+    raise AddPhosphateError("--ends must be one of: both, 5, 3, none")
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Report and add missing terminal 5' and 3' phosphate groups to nucleic-acid PDB chains."
+        description=(
+            "Report and add terminal 5'/3' phosphate groups and optionally the O3' atom preceding a 5' phosphate."
+        )
     )
     parser.add_argument("input_pdb", help="Input PDB file.")
     parser.add_argument("-o", "--out", default=None, help="Output PDB file. Default: <input>_add_phosphates.pdb")
     parser.add_argument("--chains", default="", help="Chain IDs to edit, separated by spaces or commas. Blank means all chains.")
-    parser.add_argument("--ends", default="both", help="Ends to add: both, 5, or 3. Default: both.")
+    parser.add_argument("--ends", default="both", help="Ends to add: both, 5, 3, or none. Default: both.")
+    parser.add_argument(
+        "--add-5prime-o3",
+        action="store_true",
+        help="Add O3' as residue n-1 before an existing or newly added 5' phosphate on residue n.",
+    )
     parser.add_argument("--report-only", action="store_true", help="Only report terminal phosphate status; do not write a PDB.")
     args = parser.parse_args(argv)
 
@@ -693,12 +857,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         chain_ids=chains,
         add_5prime=add_5,
         add_3prime=add_3,
+        add_5prime_o3=args.add_5prime_o3,
     )
     print(result.log_text)
     print()
     cli = ["python3", "bnp_na_lib/add_phosphates.py", str(input_path), "-o", str(output_path), "--ends", args.ends]
     if chains:
         cli.extend(["--chains", args.chains])
+    if args.add_5prime_o3:
+        cli.append("--add-5prime-o3")
     print("Equivalent CLI command:")
     print("  " + " ".join(shlex.quote(part) for part in cli))
     return 0
