@@ -1,4 +1,4 @@
-# bnp_na V13.10 updated folder
+# bnp_na V13.13 updated folder
 
 Top-level app folder contains only:
 
@@ -16,6 +16,7 @@ Top-level app folder contains only:
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
+- `combine_pdb.py` — combines multiple PDB coordinate files with consecutive A-Z chain IDs, global serial renumbering, remapped connectivity, and updated LINK/REMARK metadata.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_2.py` — helical-axis radial-angle and 2-fold symmetry-axis calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
@@ -30,6 +31,29 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.13 changes
+
+1. Version is `bnp_na V13.13`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `combine_PDB` allows the same input path to be selected repeatedly.
+3. Every occurrence receives independent chain, serial, connectivity, LINK, REMARK, and HET remapping.
+4. A repeated two-chain PDB is verified to produce chains A/B and then C/D.
+
+## V13.12 changes
+
+1. Version is `bnp_na V13.12`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `combine_PDB` now retains and updates both chain endpoints in source `LINK` records.
+3. It retains source `REMARK` records and updates current chain references in re_helix, bnp_na, and common DSSR-style formats.
+4. Original/source provenance inside re_helix remarks remains unchanged.
+5. Related `HET`/`HETNAM` records are retained, with linker-residue `HET` chains updated.
+
+## V13.11 changes
+
+1. Version is `bnp_na V13.11`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. A `combine_PDB` button is available from `Other tools`.
+3. Its input-count dropdown dynamically displays 2 through 26 scrollable PDB file fields.
+4. `combine_pdb.py` assigns chains consecutively as A-Z in input-file and first-appearance order.
+5. Combined coordinate records are globally renumbered, and companion records plus `CONECT` references are updated.
 
 ## V13.10 changes
 

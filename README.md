@@ -1,8 +1,8 @@
 # bnp_na
 
-`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for terminal phosphate addition, B-Z structure building, and triplex conversion.
+`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.10`.
+The current app version is `V13.13`.
 
 ## What It Does
 
@@ -16,6 +16,7 @@ The current app version is `V13.10`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
+- Combines multiple PDB files while assigning unique consecutive chain IDs in input order.
 - Reports and adds missing 5' and 3' terminal phosphates, with optional preceding 5'-terminal `O3'` atoms, from `Other tools`.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Reports DSSR helical-axis start/end/unit-vector information for two selected PDB chains and optionally writes an axis BILD drawing.
@@ -87,6 +88,8 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 For B-Z junction constructs, click the `B-Z builder` button on the same row as the `B-DNA`, `A-DNA`, `A-RNA`, and `Z-DNA` choices. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
 
 For triplex construction from an existing duplex PDB, click the `Triplex converter` button directly to the right of `B-Z builder`.
+
+To merge existing coordinate files, click `combine_PDB` in `Other tools`, choose the number of inputs, and fill the dynamically generated PDB fields in the desired chain order.
 
 ## GUI Field Guide
 
@@ -575,7 +578,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.10 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.13 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -836,6 +839,32 @@ python3 bnp_na_lib/helical_axis_info.py -i model.pdb \
   --reference-vector-length 20
 ```
 
+## combine_PDB Tool
+
+`bnp_na` V13.11 introduced a `combine_PDB` button in the main GUI's `Other tools` section. It combines two or more PDB coordinate files into one structure without changing any atomic coordinates. V13.12 adds automatic preservation and chain-ID updating for `LINK`, `REMARK`, and related linker-residue metadata.
+
+Choose the number of input files from the dropdown. The dialog immediately displays that many input fields in a scrollable area and retains paths when the count is temporarily reduced. Input order controls chain order. Within each PDB, chains are detected from `ATOM` and `HETATM` records in first-appearance order.
+
+For example, if input 1 has three chains and input 2 has four chains, the output assignment is:
+
+```text
+Input 1: A, B, C
+Input 2: D, E, F, G
+```
+
+The source chain names do not affect the new names. Blank source chain IDs are treated as real chains. Because the traditional PDB chain field is one character, the combined output is limited to 26 chains (`A` through `Z`). The same PDB file may be entered repeatedly in two or more input fields. Every occurrence is treated as a separate copy and receives fresh chain IDs; for example, repeating the same two-chain PDB twice produces chains `A/B` and then `C/D`. The output cannot overwrite an input file.
+
+The output contains the combined `ATOM`, `HETATM`, `TER`, `ANISOU`, `SIGATM`, `SIGUIJ`, and `CONECT` data plus `REMARK BNP_NA_COMBINE_PDB` provenance. Atom/TER serials are renumbered globally, companion serials and `CONECT` references are remapped, source `MODEL` wrappers are removed, and one final `END` record is written. Multi-model inputs with more than one `MODEL` are rejected so separate models are not accidentally flattened into one structure.
+
+Source `LINK` records are copied with both endpoint chain fields reassigned. Source `REMARK` records are also copied. The combiner recognizes and updates current chain/residue references in `re_helix` `REMARK 950 RE_SCRIPT CHAIN_RANGE`, `CHAIN_RESIDUES`, `JUNCTION`, and `SPECIAL` records, bnp_na `CHAIN` annotations, colon-form labels such as `A:13:X33`, and DSSR-form labels such as `A.DA13`. Historical `COMMAND`, `source=`, `original_*=`, and other provenance fields remain unchanged. `HET` and `HETNAM` records are retained as well, with the `HET` chain field updated. Other PDB header and secondary-structure metadata are not copied.
+
+You can also run it directly, listing inputs in the desired order:
+
+```bash
+python3 bnp_na_lib/combine_pdb.py first.pdb second.pdb third.pdb \
+  -o combine_PDB_out.pdb
+```
+
 ## Add Phosphates Tool
 
 `bnp_na` V13.10 includes an `Add phosphates` button in the main GUI's `Other tools` section. This tool reads an existing nucleic-acid PDB, reports whether each chain has terminal 5' and 3' phosphates and a preceding 5'-terminal `O3'`, and can add selected missing atoms to selected chains.
@@ -1080,6 +1109,7 @@ bnp_na.py                  Main GUI/controller
 CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/add_phosphates.py Terminal phosphate reporter and placement helper
+bnp_na_lib/combine_pdb.py   Multi-PDB combiner with chain/serial plus LINK/REMARK metadata updating
 bnp_na_lib/angle_helical_axisV2_2.py Helical-axis radial-angle and 2-fold symmetry-axis BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
 bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter

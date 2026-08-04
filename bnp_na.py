@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.10: Building and placing nucleic acid helices.
+"""bnp_na V13.13: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -11,9 +11,9 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.10"
+__version__ = "V13.13"
 APP_NAME = "bnp_na"
 
 # Answer -v/--version before importing the GUI toolkit so that
@@ -49,6 +49,7 @@ from build_triplex import (  # noqa: E402
 )
 from build_zdna import build_zdna  # noqa: E402
 from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
+from combine_pdb import combine_pdb_files, default_combine_pdb_output_path  # noqa: E402
 from add_phosphates import (  # noqa: E402
     add_terminal_phosphates,
     analyze_phosphate_termini,
@@ -562,6 +563,14 @@ class App(tk.Tk):
             "XYZ axes BILD",
             "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
         ).grid(row=0, column=9, sticky="w", padx=(0, 8), pady=inner_y)
+        ttk.Button(tools, text="combine_PDB", command=self.open_combine_pdb_dialog).grid(
+            row=1, column=0, sticky="w", padx=(8, 4), pady=inner_y
+        )
+        self._make_help_button(
+            tools,
+            "combine_PDB",
+            "Combine two or more PDB files. Source chains are assigned consecutive chain IDs A, B, C, ... in input-file and first-appearance order; LINK and chain-bearing REMARK records are updated automatically.",
+        ).grid(row=1, column=1, sticky="w", padx=(0, 10), pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
@@ -1249,6 +1258,203 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         pdb_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
         chains_var.trace_add("write", lambda *_args: refresh_default_bild(force=True))
         refresh_bild_state()
+
+    def open_combine_pdb_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
+        win.title("combine_PDB")
+        win.geometry("880x680+220+120")
+        win.minsize(720, 560)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(2, weight=1)
+        win.grid_rowconfigure(5, weight=1)
+
+        def current_output_dir() -> Path:
+            text = self.output_dir_var.get().strip()
+            if not text:
+                return DEFAULT_OUTPUT_DIR
+            path = Path(text).expanduser()
+            if not path.is_absolute():
+                path = path.resolve()
+            return path
+
+        file_count_var = tk.StringVar(value="2")
+        input_vars = [tk.StringVar(value="") for _index in range(26)]
+        output_var = tk.StringVar(value=str(default_combine_pdb_output_path(current_output_dir())))
+
+        def set_dialog_log(text: str) -> None:
+            result_text.configure(state="normal")
+            result_text.delete("1.0", "end")
+            result_text.insert("1.0", text)
+            result_text.see("1.0")
+            result_text.configure(state="disabled")
+            win.update_idletasks()
+
+        def browse_input(index: int) -> None:
+            current_text = input_vars[index].get().strip()
+            initial_dir = current_output_dir()
+            if current_text:
+                current_path = Path(current_text).expanduser()
+                if str(current_path.parent) not in ("", "."):
+                    initial_dir = current_path.parent
+            selected = filedialog.askopenfilename(
+                title=f"Choose input PDB {index + 1}",
+                initialdir=str(initial_dir),
+                filetypes=[("PDB files", "*.pdb *.ent"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                input_vars[index].set(selected)
+
+        def render_input_fields(*_args: object) -> None:
+            for child in input_frame.winfo_children():
+                child.destroy()
+            count = int(file_count_var.get())
+            input_frame.grid_columnconfigure(1, weight=1)
+            for index in range(count):
+                ttk.Label(input_frame, text=f"Input PDB {index + 1}:").grid(
+                    row=index, column=0, sticky="e", padx=(8, 6), pady=4
+                )
+                ttk.Entry(input_frame, textvariable=input_vars[index]).grid(
+                    row=index, column=1, sticky="we", padx=4, pady=4
+                )
+                ttk.Button(
+                    input_frame,
+                    text="Browse",
+                    command=lambda input_index=index: browse_input(input_index),
+                ).grid(row=index, column=2, sticky="w", padx=(4, 8), pady=4)
+            input_frame.update_idletasks()
+            input_canvas.configure(scrollregion=input_canvas.bbox("all"))
+            input_canvas.yview_moveto(0.0)
+
+        def browse_output() -> None:
+            current = Path(
+                output_var.get().strip() or str(default_combine_pdb_output_path(current_output_dir()))
+            ).expanduser()
+            selected = filedialog.asksaveasfilename(
+                title="Save combined PDB",
+                initialdir=str(current.parent if str(current.parent) not in ("", ".") else current_output_dir()),
+                initialfile=current.name or "combine_PDB_out.pdb",
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                output_var.set(selected)
+
+        def run_combine() -> None:
+            try:
+                count = int(file_count_var.get())
+                input_paths: List[Path] = []
+                for index in range(count):
+                    value = input_vars[index].get().strip()
+                    if not value:
+                        raise ValueError(f"Please choose input PDB {index + 1}.")
+                    input_paths.append(Path(value).expanduser())
+
+                output_text = output_var.get().strip()
+                if not output_text:
+                    raise ValueError("Please choose an output PDB file.")
+                output_path = Path(output_text).expanduser()
+
+                run_btn.configure(state="disabled")
+                win.update_idletasks()
+                result = combine_pdb_files(input_paths, output_path)
+            except Exception as exc:
+                messagebox.showerror("combine_PDB", str(exc), parent=win)
+                return
+            finally:
+                try:
+                    run_btn.configure(state="normal")
+                except Exception:
+                    pass
+
+            cli_args = [
+                "python3",
+                "bnp_na_lib/combine_pdb.py",
+                *[str(path) for path in result.input_pdbs],
+                "-o",
+                str(result.output_pdb),
+            ]
+            log = "\n".join(
+                [
+                    "=== combine_PDB tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    result.log_text,
+                ]
+            )
+            set_dialog_log(result.log_text)
+            self._append_log(log)
+            messagebox.showinfo(
+                "combine_PDB",
+                f"Combined {len(result.input_pdbs)} PDB files into {result.chain_count} chains.\n\n"
+                f"Wrote:\n{result.output_pdb}",
+                parent=win,
+            )
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Number of input PDB files:").grid(row=0, column=0, sticky="e", **pad)
+        count_combo = ttk.Combobox(
+            win,
+            textvariable=file_count_var,
+            values=tuple(str(value) for value in range(2, 27)),
+            state="readonly",
+            width=5,
+        )
+        count_combo.grid(row=0, column=1, sticky="w", **pad)
+        count_combo.bind("<<ComboboxSelected>>", render_input_fields)
+
+        ttk.Label(win, text="Output PDB:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=output_var).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_output).grid(row=1, column=2, sticky="w", **pad)
+
+        input_box = ttk.LabelFrame(win, text="Input PDB files (chain assignment follows this order)")
+        input_box.grid(row=2, column=0, columnspan=3, sticky="nsew", padx=10, pady=6)
+        input_box.grid_columnconfigure(0, weight=1)
+        input_box.grid_rowconfigure(0, weight=1)
+        input_canvas = tk.Canvas(input_box, highlightthickness=0, height=230)
+        input_scroll = ttk.Scrollbar(input_box, orient="vertical", command=input_canvas.yview)
+        input_canvas.configure(yscrollcommand=input_scroll.set)
+        input_canvas.grid(row=0, column=0, sticky="nsew")
+        input_scroll.grid(row=0, column=1, sticky="ns")
+        input_frame = ttk.Frame(input_canvas)
+        input_window = input_canvas.create_window((0, 0), window=input_frame, anchor="nw")
+        input_frame.bind(
+            "<Configure>", lambda _event: input_canvas.configure(scrollregion=input_canvas.bbox("all"))
+        )
+        input_canvas.bind(
+            "<Configure>", lambda event: input_canvas.itemconfigure(input_window, width=event.width)
+        )
+
+        ttk.Label(
+            win,
+            text="Chains are detected in first-appearance order within each file and renamed A-Z across all inputs. "
+            "The same PDB may be selected more than once; every occurrence receives fresh chain IDs. "
+            "LINK endpoints and recognized chain-bearing REMARK/HET metadata are updated too. "
+            "The PDB format limits the combined output to 26 chains.",
+            style="Hint.TLabel",
+            wraplength=820,
+            justify="left",
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(2, 4))
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=4, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 6))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Combine PDB files", command=run_combine)
+        run_btn.pack(side="left", padx=6)
+
+        result_text = scrolledtext.ScrolledText(win, width=96, height=10, wrap="none")
+        try:
+            result_text.configure(font=("Menlo", 10))
+        except Exception:
+            result_text.configure(font=("Courier", 10))
+        result_text.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(2, 8))
+        result_text.configure(state="disabled")
+
+        render_input_fields()
+        set_dialog_log("Choose two or more PDB files. Input order determines the new chain-ID order.")
 
     def open_add_phosphates_dialog(self) -> None:
         win = tk.Toplevel(self)

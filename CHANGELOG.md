@@ -2,6 +2,28 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.13
+
+- `combine_PDB` now allows the same input PDB path to appear two or more times.
+- Every repeated occurrence is processed independently and receives fresh consecutive chain IDs, atom/TER serials, connectivity references, and updated `LINK`/`REMARK`/`HET` metadata.
+- Added regression coverage showing that a repeated two-chain PDB produces `A/B` for its first occurrence and `C/D` for its second occurrence.
+
+## V13.12
+
+- The `combine_PDB` tool now preserves `LINK` records and updates both fixed-column endpoint chain IDs.
+- Source `REMARK` records are retained, with automatic chain updates for `re_helix` `CHAIN_RANGE`, `CHAIN_RESIDUES`, `JUNCTION`, and `SPECIAL` current-output fields, bnp_na `CHAIN` annotations, and common colon/DSSR-style residue labels.
+- `re_helix` provenance fields such as `COMMAND`, `source=`, and `original_*=` remain unchanged so their original identities are not corrupted.
+- Related `HET` and `HETNAM` records are retained, with `HET` chain IDs updated for linker residues.
+- Added regression and real-example validation using `Inverted_TT-A38-Olson_rex.pdb`, including all 41 of its `LINK` records.
+
+## V13.11
+
+- Added a `combine_PDB` tool in `Other tools` for combining two or more PDB coordinate files.
+- Added a dynamic input-count dropdown with scrollable file fields for 2 through 26 input PDB files.
+- Source chains are reassigned consecutive uppercase IDs (`A` through `Z`) in input-file and first-appearance order.
+- Combined outputs globally renumber `ATOM`, `HETATM`, and `TER` records and remap companion-record serials and `CONECT` references.
+- Added `bnp_na_lib/combine_pdb.py` as a reusable helper and direct command-line tool.
+
 ## V13.10
 
 - Added an optional `O3' before 5' phosphate` mode to the Add phosphates tool and its CLI.
