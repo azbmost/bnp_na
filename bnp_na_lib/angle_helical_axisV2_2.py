@@ -11,6 +11,8 @@
 # Example (fit axis from PDB):
 #   python angle_helical_axisV2_2.py -i helix.pdb --point1 A:5:C1' --point2 B:18:C1' \
 #       -o helix_axis_vectors.bild
+#   python angle_helical_axisV2_2.py -i helix.pdb --axis_range "A1-A35,B60-B26" \
+#       --point1 A:5:C1' --point2 B:56:C1' -o selected_axis_vectors.bild
 #
 # Example (custom axis, no PDB needed):
 #   python angle_helical_axisV2_2.py --axis-point "0 0 0" --axis-vector "0 0 1" \
@@ -41,6 +43,8 @@ Points can be specified either as:
 
 Axis options:
   * Default: fit axis from PDB using --axis-atoms (default C1')
+  * Limit a PDB fit with --axis-range/--axis_range (for example A1-A35,B60-B26).
+    The written start-to-end order of the first range sets the positive direction.
   * Custom axis: provide BOTH --axis-point and --axis-vector (PDB not required unless
     you specify points by atom).
 
@@ -79,6 +83,33 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+
+
+# Keep multiple filename patterns as separate Tcl list elements on platforms
+# where filtering is safe.  Older Aqua Tk 8.6 builds can abort in native code
+# while converting an otherwise harmless extension to a macOS UTType, so the
+# dialog helper below deliberately omits filetypes on macOS.
+PDB_OPEN_FILETYPES = (
+    ("PDB files", ("*.pdb", "*.ent", "*.pdb1", "*.pdb.txt", "*.txt")),
+    ("All files", "*"),
+)
+BILD_SAVE_FILETYPES = (("BILD files", "*.bild"), ("All files", "*"))
+
+
+def _file_dialog_options(
+    title: str,
+    filetypes: object,
+    *,
+    defaultextension: Optional[str] = None,
+    platform: Optional[str] = None,
+) -> Dict[str, object]:
+    """Build options without unsafe native file-type filtering on macOS."""
+    options: Dict[str, object] = {"title": title}
+    if defaultextension is not None:
+        options["defaultextension"] = defaultextension
+    if (sys.platform if platform is None else platform) != "darwin":
+        options["filetypes"] = filetypes
+    return options
 
 
 # -----------------------------
@@ -194,6 +225,7 @@ def fit_axis_pca(
     atoms: Sequence[Atom],
     axis_atom_names: Sequence[str],
     *,
+    residue_ranges: Optional[Sequence[Sequence["ResidueRef"]]] = None,
     prefer_positive_correlation: bool = True,
 ) -> Axis:
     """Fit a best-fit line (axis) by PCA/SVD of selected atom coordinates."""
@@ -201,17 +233,29 @@ def fit_axis_pca(
     for nm in axis_atom_names:
         alias_set.update(atom_aliases(nm))
 
+    selected_residues = None
+    if residue_ranges is not None:
+        selected_residues = {
+            (ref.chainID, ref.resSeq)
+            for residue_range in residue_ranges
+            for ref in residue_range
+        }
+
     pts: List[np.ndarray] = []
     chain_resseq: List[Tuple[str, int]] = []
 
     for a in atoms:
-        if a.name in alias_set:
+        if a.name in alias_set and (
+            selected_residues is None or (a.chainID, a.resSeq) in selected_residues
+        ):
             pts.append(a.xyz)
             chain_resseq.append((a.chainID, a.resSeq))
 
     if len(pts) < 3:
+        range_note = " in the selected axis range(s)" if selected_residues is not None else ""
         raise ValueError(
-            f"Need at least 3 atoms to fit axis; found {len(pts)} atoms matching {sorted(alias_set)}"
+            f"Need at least 3 atoms to fit axis; found {len(pts)} atoms matching "
+            f"{sorted(alias_set)}{range_note}"
         )
 
     X = np.stack(pts, axis=0)
@@ -222,8 +266,35 @@ def fit_axis_pca(
     _, _, vt = np.linalg.svd(Xc, full_matrices=False)
     direction = _normalize(vt[0])
 
-    # Choose sign: try to make projection correlate positively with residue numbering
-    if prefer_positive_correlation and len(chain_resseq) >= 6:
+    # When ranges are explicit, their first written range is authoritative:
+    # orient the axis from that range's start toward its end. Average multiple
+    # selected axis atoms within a residue before choosing the sign.
+    if residue_ranges is not None:
+        first_range = residue_ranges[0]
+        points_by_residue: Dict[Tuple[str, int], List[np.ndarray]] = {}
+        for point, residue_key in zip(pts, chain_resseq):
+            points_by_residue.setdefault(residue_key, []).append(point)
+        ordered_centers = [
+            np.stack(points_by_residue[(ref.chainID, ref.resSeq)], axis=0).mean(axis=0)
+            for ref in first_range
+            if (ref.chainID, ref.resSeq) in points_by_residue
+        ]
+        if len(ordered_centers) < 2:
+            raise ValueError(
+                "The first axis range must contain selected axis atoms in at least two residues "
+                "so its start-to-end direction can be determined."
+            )
+        direction_anchor = ordered_centers[-1] - ordered_centers[0]
+        if float(np.linalg.norm(direction_anchor)) < 1e-12:
+            raise ValueError(
+                "The first axis range has coincident start/end axis-atom centers; "
+                "its positive direction cannot be determined."
+            )
+        if float(np.dot(direction, direction_anchor)) < 0.0:
+            direction = -direction
+
+    # Without an explicit range, retain the original residue-number heuristic.
+    elif prefer_positive_correlation and len(chain_resseq) >= 6:
         counts: Dict[str, int] = {}
         for ch, _rs in chain_resseq:
             counts[ch] = counts.get(ch, 0) + 1
@@ -528,6 +599,23 @@ def parse_symmetry_regions(text: str) -> Tuple[List[ResidueRef], List[ResidueRef
     if len(first) < 2:
         raise ValueError("Symmetry regions need at least two paired residues.")
     return first, second
+
+
+def parse_axis_ranges(text: str) -> List[List[ResidueRef]]:
+    """Parse one or more residue ranges used to select and orient a PDB axis fit."""
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    if not parts:
+        raise ValueError(
+            "Provide at least one residue range for --axis-range/--axis_range, "
+            'for example: "A1-A35,B60-B26".'
+        )
+    ranges = [_parse_residue_range(part) for part in parts]
+    if len(ranges[0]) < 2:
+        raise ValueError(
+            "The first axis range must contain at least two residues because its "
+            "start-to-end order sets the positive axis direction."
+        )
+    return ranges
 
 
 def _format_residue_range(refs: Sequence[ResidueRef]) -> str:
@@ -888,6 +976,7 @@ def make_report(
     pdb_path: Optional[Path],
     axis_source: str,
     axis_atoms: Sequence[str],
+    axis_range: Optional[str],
     axis: Axis,
     r1: Optional[RadialResult],
     r2: Optional[RadialResult],
@@ -898,6 +987,9 @@ def make_report(
     lines.append(f"Axis source: {axis_source}")
     if axis_source.lower().startswith("pdb"):
         lines.append(f"Axis atoms: {', '.join(axis_atoms)}")
+        lines.append(f"Axis residue ranges: {axis_range if _has_text(axis_range) else '(all residues)'}")
+        if _has_text(axis_range):
+            lines.append("Axis positive direction: start-to-end order of the first axis range")
     lines.append("")
 
     lines.append("Helical axis (best-fit line / user-defined line):")
@@ -1024,6 +1116,7 @@ class RunConfig:
 
     # Axis from PDB
     axis_atoms: List[str]
+    axis_range: Optional[str] = None
 
     # Custom axis (if provided)
     axis_point: Optional[str] = None  # xyz triplet string
@@ -1060,6 +1153,10 @@ def run(cfg: RunConfig) -> str:
     use_custom_axis = (cfg.axis_point is not None) or (cfg.axis_vector is not None)
     if use_custom_axis and (cfg.axis_point is None or cfg.axis_vector is None):
         raise ValueError("Custom axis requires BOTH axis_point and axis_vector")
+    if use_custom_axis and _has_text(cfg.axis_range):
+        raise ValueError("axis_range applies only when fitting the axis from a PDB")
+
+    axis_ranges = parse_axis_ranges(cfg.axis_range or "") if _has_text(cfg.axis_range) else None
 
     has_point1 = _has_text(cfg.point1)
     has_point2 = _has_text(cfg.point2)
@@ -1122,8 +1219,12 @@ def run(cfg: RunConfig) -> str:
         axis_source = "Custom (user-defined point + vector)"
     else:
         assert atoms is not None
-        axis = fit_axis_pca(atoms, cfg.axis_atoms)
-        axis_source = "PDB fit (PCA on axis atoms)"
+        axis = fit_axis_pca(atoms, cfg.axis_atoms, residue_ranges=axis_ranges)
+        axis_source = (
+            "PDB fit (PCA on axis atoms in selected residue ranges)"
+            if axis_ranges is not None
+            else "PDB fit (PCA on axis atoms)"
+        )
 
     r1: Optional[RadialResult] = None
     r2: Optional[RadialResult] = None
@@ -1155,7 +1256,16 @@ def run(cfg: RunConfig) -> str:
         axis_margin=cfg.axis_margin,
     )
 
-    report = make_report(pdb_path, axis_source, cfg.axis_atoms, axis, r1, r2, symmetry)
+    report = make_report(
+        pdb_path,
+        axis_source,
+        cfg.axis_atoms,
+        cfg.axis_range,
+        axis,
+        r1,
+        r2,
+        symmetry,
+    )
     report += f"\nBILD written: {cfg.out_bild}\n"
     return report
 
@@ -1191,7 +1301,7 @@ def launch_gui(parent=None, log_callback=None) -> None:
     root = tk.Tk() if owns_mainloop else tk.Toplevel(parent)
     _set_optional_window_icon(root, tk)
     root.title("angle_helical_axisV2_2.py")
-    root.geometry("900x760")
+    root.geometry("900x800")
     root.minsize(760, 620)
 
     # Variables
@@ -1201,6 +1311,7 @@ def launch_gui(parent=None, log_callback=None) -> None:
     # Axis source
     var_axis_source = tk.StringVar(value="Fit from PDB")  # or "Custom"
     var_axis_atoms = tk.StringVar(value="C1'")
+    var_axis_range = tk.StringVar(value="")
 
     # Custom axis (xyz)
     var_axis_px = tk.StringVar(value="0")
@@ -1242,8 +1353,7 @@ def launch_gui(parent=None, log_callback=None) -> None:
 
     def browse_pdb() -> None:
         fn = filedialog.askopenfilename(
-            title="Select PDB file",
-            filetypes=[("PDB files", "*.pdb *.ent *.pdb1 *.pdb.txt *.txt"), ("All files", "*")],
+            **_file_dialog_options("Select PDB file", PDB_OPEN_FILETYPES)
         )
         if fn:
             var_pdb.set(fn)
@@ -1253,9 +1363,11 @@ def launch_gui(parent=None, log_callback=None) -> None:
 
     def browse_out() -> None:
         fn = filedialog.asksaveasfilename(
-            title="Save BILD file",
-            defaultextension=".bild",
-            filetypes=[("BILD files", "*.bild"), ("All files", "*")],
+            **_file_dialog_options(
+                "Save BILD file",
+                BILD_SAVE_FILETYPES,
+                defaultextension=".bild",
+            )
         )
         if fn:
             var_out.set(fn)
@@ -1345,6 +1457,9 @@ def launch_gui(parent=None, log_callback=None) -> None:
         axis_point = None
         axis_vector = None
         axis_atoms = parse_axis_atoms(var_axis_atoms.get())
+        axis_range = (
+            var_axis_range.get().strip() if axis_source == "Fit from PDB" else ""
+        )
 
         if axis_source == "Custom axis":
             axis_point = f"{var_axis_px.get()} {var_axis_py.get()} {var_axis_pz.get()}"
@@ -1353,6 +1468,12 @@ def launch_gui(parent=None, log_callback=None) -> None:
             try:
                 parse_xyz_triplet(axis_point, what="axis point")
                 parse_xyz_triplet(axis_vector, what="axis vector")
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+                return
+        elif axis_range:
+            try:
+                parse_axis_ranges(axis_range)
             except Exception as e:
                 messagebox.showerror("Error", str(e))
                 return
@@ -1381,6 +1502,7 @@ def launch_gui(parent=None, log_callback=None) -> None:
             cfg = RunConfig(
                 pdb=pdb_path,
                 axis_atoms=axis_atoms,
+                axis_range=axis_range or None,
                 axis_point=axis_point,
                 axis_vector=axis_vector,
                 point1=p1_spec or None,
@@ -1410,6 +1532,8 @@ def launch_gui(parent=None, log_callback=None) -> None:
                 cli_args.extend(["--axis-point", axis_point or "", "--axis-vector", axis_vector or ""])
             else:
                 cli_args.extend(["--axis-atoms", " ".join(axis_atoms)])
+                if axis_range:
+                    cli_args.extend(["--axis_range", axis_range])
             if p1_spec and p2_spec:
                 cli_args.extend(["--point1", p1_spec, "--point2", p2_spec])
             if sym_enabled:
@@ -1472,9 +1596,16 @@ def launch_gui(parent=None, log_callback=None) -> None:
     ent_axis_atoms = tk.Entry(frm, textvariable=var_axis_atoms, width=20)
     ent_axis_atoms.grid(row=2, column=1, sticky="w", padx=(5, 5))
 
+    # Axis residue-range row (PDB fit)
+    tk.Label(frm, text="Axis residue ranges (PDB fit only)", anchor="w").grid(
+        row=3, column=0, sticky="w"
+    )
+    ent_axis_range = tk.Entry(frm, textvariable=var_axis_range, width=32)
+    ent_axis_range.grid(row=3, column=1, sticky="w", padx=(5, 5))
+
     # Custom axis frame
     frm_custom = tk.Frame(frm)
-    frm_custom.grid(row=3, column=0, columnspan=3, sticky="we", pady=(2, 2))
+    frm_custom.grid(row=4, column=0, columnspan=3, sticky="we", pady=(2, 2))
 
     tk.Label(frm_custom, text="Custom axis point (x y z)").grid(row=0, column=0, sticky="w")
     tk.Entry(frm_custom, textvariable=var_axis_px, width=8).grid(row=0, column=1, padx=(5, 2))
@@ -1487,13 +1618,13 @@ def launch_gui(parent=None, log_callback=None) -> None:
     tk.Entry(frm_custom, textvariable=var_axis_vz, width=8).grid(row=1, column=3, padx=(2, 2))
 
     # Point 1 controls
-    tk.Label(frm, text="Point 1 type", anchor="w").grid(row=4, column=0, sticky="w")
-    tk.OptionMenu(frm, var_p1_mode, "Atom", "XYZ").grid(row=4, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Point 1 type", anchor="w").grid(row=5, column=0, sticky="w")
+    tk.OptionMenu(frm, var_p1_mode, "Atom", "XYZ").grid(row=5, column=1, sticky="w", padx=(5, 5))
 
     frm_p1_atom = tk.Frame(frm)
     frm_p1_xyz = tk.Frame(frm)
-    frm_p1_atom.grid(row=5, column=0, columnspan=3, sticky="we")
-    frm_p1_xyz.grid(row=5, column=0, columnspan=3, sticky="we")
+    frm_p1_atom.grid(row=6, column=0, columnspan=3, sticky="we")
+    frm_p1_xyz.grid(row=6, column=0, columnspan=3, sticky="we")
 
     tk.Label(frm_p1_atom, text="Point 1 atom (chain, resSeq, atom)").grid(row=0, column=0, sticky="w")
     tk.Entry(frm_p1_atom, textvariable=var_p1_chain, width=5).grid(row=0, column=1, padx=(5, 2))
@@ -1506,13 +1637,13 @@ def launch_gui(parent=None, log_callback=None) -> None:
     tk.Entry(frm_p1_xyz, textvariable=var_p1_z, width=8).grid(row=0, column=3, padx=(2, 2))
 
     # Point 2 controls
-    tk.Label(frm, text="Point 2 type", anchor="w").grid(row=6, column=0, sticky="w")
-    tk.OptionMenu(frm, var_p2_mode, "Atom", "XYZ").grid(row=6, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Point 2 type", anchor="w").grid(row=7, column=0, sticky="w")
+    tk.OptionMenu(frm, var_p2_mode, "Atom", "XYZ").grid(row=7, column=1, sticky="w", padx=(5, 5))
 
     frm_p2_atom = tk.Frame(frm)
     frm_p2_xyz = tk.Frame(frm)
-    frm_p2_atom.grid(row=7, column=0, columnspan=3, sticky="we")
-    frm_p2_xyz.grid(row=7, column=0, columnspan=3, sticky="we")
+    frm_p2_atom.grid(row=8, column=0, columnspan=3, sticky="we")
+    frm_p2_xyz.grid(row=8, column=0, columnspan=3, sticky="we")
 
     tk.Label(frm_p2_atom, text="Point 2 atom (chain, resSeq, atom)").grid(row=0, column=0, sticky="w")
     tk.Entry(frm_p2_atom, textvariable=var_p2_chain, width=5).grid(row=0, column=1, padx=(5, 2))
@@ -1525,26 +1656,26 @@ def launch_gui(parent=None, log_callback=None) -> None:
     tk.Entry(frm_p2_xyz, textvariable=var_p2_z, width=8).grid(row=0, column=3, padx=(2, 2))
 
     # Optional 2-fold symmetry-axis controls
-    tk.Label(frm, text="2-fold symmetry output", anchor="w").grid(row=8, column=0, sticky="w")
+    tk.Label(frm, text="2-fold symmetry output", anchor="w").grid(row=9, column=0, sticky="w")
     frm_sym_toggle = tk.Frame(frm)
-    frm_sym_toggle.grid(row=8, column=1, sticky="w", padx=(5, 5))
+    frm_sym_toggle.grid(row=9, column=1, sticky="w", padx=(5, 5))
     tk.Radiobutton(frm_sym_toggle, text="Off", variable=var_sym_enabled, value="Off").grid(row=0, column=0, sticky="w")
     tk.Radiobutton(frm_sym_toggle, text="On", variable=var_sym_enabled, value="On").grid(row=0, column=1, sticky="w", padx=(12, 0))
 
     lbl_sym_regions = tk.Label(frm, text="2-fold symmetry regions", anchor="w")
-    lbl_sym_regions.grid(row=9, column=0, sticky="w")
+    lbl_sym_regions.grid(row=10, column=0, sticky="w")
     ent_sym_regions = tk.Entry(frm, textvariable=var_sym_regions, width=32)
-    ent_sym_regions.grid(row=9, column=1, sticky="w", padx=(5, 5))
+    ent_sym_regions.grid(row=10, column=1, sticky="w", padx=(5, 5))
 
     lbl_sym_atoms = tk.Label(frm, text="2-fold symmetry atoms", anchor="w")
-    lbl_sym_atoms.grid(row=10, column=0, sticky="w")
+    lbl_sym_atoms.grid(row=11, column=0, sticky="w")
     ent_sym_atoms = tk.Entry(frm, textvariable=var_sym_atoms, width=20)
-    ent_sym_atoms.grid(row=10, column=1, sticky="w", padx=(5, 5))
+    ent_sym_atoms.grid(row=11, column=1, sticky="w", padx=(5, 5))
 
     lbl_sym_radius = tk.Label(frm, text="2-fold point radius (A)", anchor="w")
-    lbl_sym_radius.grid(row=11, column=0, sticky="w")
+    lbl_sym_radius.grid(row=12, column=0, sticky="w")
     ent_sym_radius = tk.Entry(frm, textvariable=var_sym_radius, width=10)
-    ent_sym_radius.grid(row=11, column=1, sticky="w", padx=(5, 5))
+    ent_sym_radius.grid(row=12, column=1, sticky="w", padx=(5, 5))
     sym_dependent_widgets = [
         lbl_sym_regions,
         ent_sym_regions,
@@ -1555,38 +1686,40 @@ def launch_gui(parent=None, log_callback=None) -> None:
     ]
 
     # Output
-    add_entry_row(12, "Output .bild", var_out, browse_out)
+    add_entry_row(13, "Output .bild", var_out, browse_out)
 
     # Axis drawing margin and radii
-    tk.Label(frm, text="Axis drawing margin", anchor="w").grid(row=13, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_axis_margin, width=10).grid(row=13, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Axis drawing margin", anchor="w").grid(row=14, column=0, sticky="w")
+    tk.Entry(frm, textvariable=var_axis_margin, width=10).grid(row=14, column=1, sticky="w", padx=(5, 5))
 
-    tk.Label(frm, text="Axis radius", anchor="w").grid(row=14, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_axis_r, width=10).grid(row=14, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Axis radius", anchor="w").grid(row=15, column=0, sticky="w")
+    tk.Entry(frm, textvariable=var_axis_r, width=10).grid(row=15, column=1, sticky="w", padx=(5, 5))
 
-    tk.Label(frm, text="Vector radius", anchor="w").grid(row=15, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_vec_r, width=10).grid(row=15, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Vector radius", anchor="w").grid(row=16, column=0, sticky="w")
+    tk.Entry(frm, textvariable=var_vec_r, width=10).grid(row=16, column=1, sticky="w", padx=(5, 5))
 
-    tk.Label(frm, text="Sphere radius", anchor="w").grid(row=16, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_sph_r, width=10).grid(row=16, column=1, sticky="w", padx=(5, 5))
+    tk.Label(frm, text="Sphere radius", anchor="w").grid(row=17, column=0, sticky="w")
+    tk.Entry(frm, textvariable=var_sph_r, width=10).grid(row=17, column=1, sticky="w", padx=(5, 5))
 
-    tk.Button(frm, text="Run", command=do_run).grid(row=17, column=0, pady=(8, 8), sticky="w")
+    tk.Button(frm, text="Run", command=do_run).grid(row=18, column=0, pady=(8, 8), sticky="w")
 
     # Output text
     text = ScrolledText(frm, height=18, width=90)
-    text.grid(row=18, column=0, columnspan=3, sticky="nsew", pady=(5, 0))
+    text.grid(row=19, column=0, columnspan=3, sticky="nsew", pady=(5, 0))
 
     frm.columnconfigure(1, weight=1)
-    frm.rowconfigure(18, weight=1)
+    frm.rowconfigure(19, weight=1)
 
     def refresh_visibility(*_args) -> None:
         # Axis controls
         if var_axis_source.get() == "Custom axis":
             frm_custom.grid()
             ent_axis_atoms.configure(state="disabled")
+            ent_axis_range.configure(state="disabled")
         else:
             frm_custom.grid_remove()
             ent_axis_atoms.configure(state="normal")
+            ent_axis_range.configure(state="normal")
 
         # Point 1
         if var_p1_mode.get() == "XYZ":
@@ -1626,6 +1759,8 @@ def launch_gui(parent=None, log_callback=None) -> None:
         "  - Point 1/Point 2 can be left blank when 2-fold symmetry regions are provided\n"
         "Axis:\n"
         "  - Fit from PDB: uses --axis-atoms (default C1')\n"
+        "  - Optional axis ranges select fit residues, e.g. A1-A35,B60-B26\n"
+        "  - The first axis range's written start-to-end order sets the positive direction\n"
         "  - Custom axis: provide axis point + axis vector (vector is normalized automatically)\n"
         "  - Axis drawing margin controls how far the displayed axis extends beyond the selected points/fit range\n"
         "2-fold symmetry axis:\n"
@@ -1668,6 +1803,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="C1'",
         help="Atom name(s) used to fit the axis (comma/space separated). Default: C1'",
+    )
+    p.add_argument(
+        "--axis-range",
+        "--axis_range",
+        dest="axis_range",
+        type=str,
+        default=None,
+        help=(
+            'Residue range(s) used for the PDB axis fit, e.g. "A1-A35,B60-B26". '
+            "The first range's written start-to-end order sets the positive axis direction."
+        ),
     )
 
     p.add_argument(
@@ -1749,6 +1895,13 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     use_custom_axis = (args.axis_point is not None) or (args.axis_vector is not None)
     if use_custom_axis and (args.axis_point is None or args.axis_vector is None):
         parser.error("Custom axis requires BOTH --axis-point and --axis-vector")
+    if use_custom_axis and _has_text(args.axis_range):
+        parser.error("--axis-range/--axis_range applies only to a PDB-fitted axis")
+    if _has_text(args.axis_range):
+        try:
+            parse_axis_ranges(args.axis_range)
+        except Exception as exc:
+            parser.error(str(exc))
     if has_symmetry and _has_text(args.symmetry_regions):
         try:
             parse_symmetry_regions(args.symmetry_regions)
@@ -1787,6 +1940,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     cfg = RunConfig(
         pdb=pdb_path,
         axis_atoms=parse_axis_atoms(args.axis_atoms),
+        axis_range=args.axis_range,
         axis_point=args.axis_point,
         axis_vector=args.axis_vector,
         point1=args.point1 if has_point1 else None,

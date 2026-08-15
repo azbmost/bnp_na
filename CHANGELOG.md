@@ -2,6 +2,28 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.16
+
+- Added a `Regularize phosphates` pipeline checkbox directly below `Run phenix.geometry_minimization`; its per-helix-type default follows the minimization default.
+- Added C1'-derived, per-chain helical regularization of every movable atom selected by `min_P_C5.params`: `P`, `OP1`, `OP2`, `O5'`, `C5'`, and `O3'`.
+- Affected terminal atoms are excluded from their consensus-location calculation and are regularized afterward from internal positions, preserving periodic phosphate-linkage bond geometry.
+- Added a standalone `Regularize phosphates` dialog under `Other tools` and a matching `bnp_na_lib/regularize_phosphates.py` CLI.
+- Added regression coverage for internal periodicity, 5'-terminal exclusion, phosphate-only 3'-terminal propagation, and short-helix validation.
+
+## V13.15
+
+- Added `--axis_range` and `--axis-range` to `Measure angle around axis` for restricting a PDB-fitted axis to one or more residue ranges.
+- Added an `Axis residue ranges` field to the angle-tool GUI.
+- All listed ranges contribute selected axis atoms to the PCA fit; the written start-to-end order of the first range sets the positive axis direction.
+- Added parsing, atom-selection, direction-orientation, and CLI-alias regression coverage.
+
+## V13.14
+
+- Fixed a native macOS Tk 8.6 crash when using the file dialogs in `Measure angle around axis`.
+- The angle tool now omits native file-type restrictions on macOS, bypassing Tk's unsafe UTType conversion while retaining file filters on other platforms.
+- The output dialog still supplies `.bild` as its default extension on macOS.
+- Added regression coverage for macOS input/output dialog options and the cross-platform filter structure.
+
 ## V13.13
 
 - `combine_PDB` now allows the same input PDB path to appear two or more times.

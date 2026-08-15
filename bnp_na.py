@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.13: Building and placing nucleic acid helices.
+"""bnp_na V13.16: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.13"
+__version__ = "V13.16"
 APP_NAME = "bnp_na"
 
 # Answer -v/--version before importing the GUI toolkit so that
@@ -56,6 +56,10 @@ from add_phosphates import (  # noqa: E402
     default_add_phosphate_output_path,
     format_phosphate_report,
     parse_chain_selection,
+)
+from regularize_phosphates import (  # noqa: E402
+    default_regularized_output_path,
+    regularize_phosphates,
 )
 from angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
@@ -274,6 +278,7 @@ class App(tk.Tk):
             na_type: {key: "" for key in PARAM_KEYS} for na_type in NA_TYPES_WITH_TABLE
         }
         self.minimize_by_type: Dict[str, bool] = dict(DEFAULT_MINIMIZE_BY_TYPE)
+        self.regularize_phosphates_by_type: Dict[str, bool] = dict(DEFAULT_MINIMIZE_BY_TYPE)
         self._active_na_type: Optional[str] = None
 
         self.grid_columnconfigure(0, weight=0, minsize=260)
@@ -424,9 +429,21 @@ class App(tk.Tk):
         self.min_frame.grid_columnconfigure(2, weight=1)
         self.params_browse_btn = ttk.Button(self.min_frame, text="Browse", command=self.browse_params)
         self.params_browse_btn.grid(row=0, column=3, sticky="w", padx=8, pady=inner_y)
+        self.regularize_phosphates_var = tk.BooleanVar(value=DEFAULT_MINIMIZE_BY_TYPE["B-DNA"])
+        ttk.Checkbutton(
+            self.min_frame,
+            text="Regularize phosphates",
+            variable=self.regularize_phosphates_var,
+            command=self._on_regularize_phosphates_toggled,
+        ).grid(row=1, column=0, sticky="w", padx=8, pady=inner_y)
+        ttk.Label(
+            self.min_frame,
+            text="Use C1' atoms to restore helical symmetry to all atoms selected in min_P_C5.params.",
+            style="Hint.TLabel",
+        ).grid(row=1, column=1, columnspan=3, sticky="w", padx=8, pady=inner_y)
         self.min_hint_var = tk.StringVar(value="")
         ttk.Label(self.min_frame, textvariable=self.min_hint_var, style="Hint.TLabel", wraplength=960).grid(
-            row=1, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 3)
+            row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 3)
         )
 
         options_row = ttk.Frame(self)
@@ -571,6 +588,17 @@ class App(tk.Tk):
             "combine_PDB",
             "Combine two or more PDB files. Source chains are assigned consecutive chain IDs A, B, C, ... in input-file and first-appearance order; LINK and chain-bearing REMARK records are updated automatically.",
         ).grid(row=1, column=1, sticky="w", padx=(0, 10), pady=inner_y)
+        ttk.Button(tools, text="Regularize phosphates", command=self.open_regularize_phosphates_dialog).grid(
+            row=1, column=2, sticky="w", padx=(0, 4), pady=inner_y
+        )
+        self._make_help_button(
+            tools,
+            "Regularize phosphates",
+            "Restore the regular repeating geometry of the phosphate backbone after Phenix minimization. "
+            "The tool measures each chain's helical repeat from its C1' atoms, uses nonterminal residues "
+            "to determine the typical backbone geometry, and adjusts only P, OP1, OP2, O5', C5', and O3'. "
+            "Terminal atoms are corrected afterward using the internal geometry. All other atoms remain unchanged.",
+        ).grid(row=1, column=3, sticky="w", padx=(0, 10), pady=inner_y)
 
         log_frame = ttk.LabelFrame(self, text="Log output", style="Bold.TLabelframe")
         log_frame.grid(row=14, column=0, columnspan=4, sticky="nsew", padx=12, pady=5)
@@ -706,6 +734,12 @@ class App(tk.Tk):
         if na_type in self.minimize_by_type:
             self.minimize_by_type[na_type] = bool(self.minimize_var.get())
         self._refresh_minimization_hint()
+
+    def _on_regularize_phosphates_toggled(self) -> None:
+        na_type = self.na_type_var.get().strip()
+        if na_type in self.regularize_phosphates_by_type:
+            self.regularize_phosphates_by_type[na_type] = bool(self.regularize_phosphates_var.get())
+        self._refresh_info_text()
 
     def _refresh_minimization_hint(self) -> None:
         na_type = self.na_type_var.get().strip()
@@ -1455,6 +1489,158 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         render_input_fields()
         set_dialog_log("Choose two or more PDB files. Input order determines the new chain-ID order.")
+
+    def open_regularize_phosphates_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
+        win.title("Regularize phosphates")
+        win.geometry("860x500+220+150")
+        win.minsize(720, 420)
+        win.grid_columnconfigure(1, weight=1)
+        win.grid_rowconfigure(3, weight=1)
+
+        def current_output_dir() -> Path:
+            text = self.output_dir_var.get().strip()
+            if not text:
+                return DEFAULT_OUTPUT_DIR
+            path = Path(text).expanduser()
+            return path if path.is_absolute() else path.resolve()
+
+        input_var = tk.StringVar(value="")
+        output_var = tk.StringVar(value="")
+        last_default_output = {"path": ""}
+
+        def default_output_path() -> Path:
+            input_text = input_var.get().strip()
+            if input_text:
+                return default_regularized_output_path(Path(input_text).expanduser())
+            return current_output_dir() / "regularized_phosphates_out.pdb"
+
+        def refresh_default_output(force: bool = False) -> None:
+            default_text = str(default_output_path())
+            current = output_var.get().strip()
+            if force or not current or current == last_default_output["path"]:
+                output_var.set(default_text)
+            last_default_output["path"] = default_text
+
+        def browse_input() -> None:
+            selected = filedialog.askopenfilename(
+                title="Choose input PDB",
+                initialdir=str(current_output_dir()),
+                filetypes=[("PDB files", "*.pdb *.ent"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                input_var.set(selected)
+                refresh_default_output(force=True)
+
+        def browse_output() -> None:
+            refresh_default_output()
+            current = Path(output_var.get().strip() or str(default_output_path())).expanduser()
+            selected = filedialog.asksaveasfilename(
+                title="Save phosphate-regularized PDB",
+                initialdir=str(current.parent),
+                initialfile=current.name,
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                output_var.set(selected)
+
+        def set_dialog_log(text: str) -> None:
+            result_text.configure(state="normal")
+            result_text.delete("1.0", "end")
+            result_text.insert("1.0", text)
+            result_text.see("1.0")
+            result_text.configure(state="disabled")
+            win.update_idletasks()
+
+        def run_regularization() -> None:
+            try:
+                input_text = input_var.get().strip()
+                if not input_text:
+                    raise ValueError("Please choose an input PDB file.")
+                input_path = Path(input_text).expanduser()
+                if not input_path.is_absolute():
+                    input_path = input_path.resolve()
+                refresh_default_output()
+                output_text = output_var.get().strip()
+                if not output_text:
+                    raise ValueError("Please choose an output PDB file.")
+                output_path = Path(output_text).expanduser()
+                if not output_path.is_absolute():
+                    output_path = output_path.resolve()
+
+                run_btn.configure(state="disabled")
+                win.update_idletasks()
+                result = regularize_phosphates(input_path, output_path)
+            except Exception as exc:
+                messagebox.showerror("Regularize phosphates", str(exc), parent=win)
+                return
+            finally:
+                try:
+                    run_btn.configure(state="normal")
+                except Exception:
+                    pass
+
+            cli_args = [
+                "python3",
+                "bnp_na_lib/regularize_phosphates.py",
+                str(input_path),
+                "-o",
+                str(output_path),
+            ]
+            log = "\n".join(
+                [
+                    "=== Regularize phosphates tool ===",
+                    "Equivalent CLI command:",
+                    "  " + " ".join(shlex.quote(part) for part in cli_args),
+                    "",
+                    result.log_text,
+                ]
+            )
+            set_dialog_log(result.log_text)
+            self._append_log(log)
+            messagebox.showinfo("Regularize phosphates", f"Wrote:\n{result.output_pdb}", parent=win)
+
+        pad = {"padx": 10, "pady": 4}
+        ttk.Label(win, text="Input PDB:").grid(row=0, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=input_var).grid(row=0, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_input).grid(row=0, column=2, sticky="w", **pad)
+
+        ttk.Label(win, text="Output PDB:").grid(row=1, column=0, sticky="e", **pad)
+        ttk.Entry(win, textvariable=output_var).grid(row=1, column=1, sticky="we", **pad)
+        ttk.Button(win, text="Browse", command=browse_output).grid(row=1, column=2, sticky="w", **pad)
+
+        ttk.Label(
+            win,
+            text=(
+                "Fits one helical step per chain from consecutive C1' atoms. Internal P/OP1/OP2/O5'/C5'/O3' "
+                "positions define the consensus; affected terminal atoms are excluded initially and regularized afterward."
+            ),
+            style="Hint.TLabel",
+            wraplength=790,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
+
+        result_text = scrolledtext.ScrolledText(win, width=92, height=14, wrap="none")
+        try:
+            result_text.configure(font=("Menlo", 10))
+        except Exception:
+            result_text.configure(font=("Courier", 10))
+        result_text.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=10, pady=4)
+        result_text.configure(state="disabled")
+
+        buttons = ttk.Frame(win)
+        buttons.grid(row=4, column=0, columnspan=3, sticky="e", padx=10, pady=(4, 8))
+        ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
+        run_btn = ttk.Button(buttons, text="Regularize phosphates", command=run_regularization)
+        run_btn.pack(side="left", padx=6)
+
+        refresh_default_output(force=True)
+        set_dialog_log("Choose an input PDB. The output defaults beside the source file.")
+        input_var.trace_add("write", lambda *_args: refresh_default_output())
 
     def open_add_phosphates_dialog(self) -> None:
         win = tk.Toplevel(self)
@@ -2298,8 +2484,11 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         tmp = str(Path(out).expanduser() / "tmp_file") if out != "<not selected>" else "<not selected>"
         pipeline = (
             "Pipeline: build by selected type -> normalize names -> optional phenix.geometry_minimization "
-            "for B-DNA/A-DNA/A-RNA -> DSSR --more axis extraction -> align to +Z"
+            "for B-DNA/A-DNA/A-RNA"
         )
+        if hasattr(self, "regularize_phosphates_var") and self.regularize_phosphates_var.get():
+            pipeline += " -> regularize phosphates from C1' helical symmetry"
+        pipeline += " -> DSSR --more axis extraction -> align to +Z"
         if hasattr(self, "invrot_enabled_var") and self.invrot_enabled_var.get():
             pipeline += f" -> inv/rot mirror ({self.invrot_operation_var.get().strip() or 'i'})"
         pipeline += " -> orient/place."
@@ -2491,6 +2680,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         old_type = self._active_na_type
         if old_type in self.minimize_by_type:
             self.minimize_by_type[old_type] = bool(self.minimize_var.get())
+            self.regularize_phosphates_by_type[old_type] = bool(self.regularize_phosphates_var.get())
 
         na_type = self.na_type_var.get().strip()
         if na_type == "Z-DNA":
@@ -2510,6 +2700,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             self.z_hint.grid_remove()
             self.min_frame.grid()
             self.minimize_var.set(self.minimize_by_type.get(na_type, False))
+            self.regularize_phosphates_var.set(self.regularize_phosphates_by_type.get(na_type, False))
             self._refresh_minimization_hint()
 
         self._active_na_type = na_type
@@ -2569,6 +2760,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         user_name = sanitize_basename(self.name_var.get().strip())
         deleteH = bool(self.deleteH_var.get())
         run_phenix = bool(self.minimize_var.get()) if na_type != "Z-DNA" else False
+        run_regularize_phosphates = (
+            bool(self.regularize_phosphates_var.get()) if na_type != "Z-DNA" else False
+        )
 
         try:
             params_for_min = self._validate_params_for_minimization(run_phenix)
@@ -2583,6 +2777,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             f"Output folder: {output_dir}\n"
             f"Intermediate folder: {tmp_dir}\n"
             f"phenix.geometry_minimization: {'ON' if run_phenix else 'OFF'}\n"
+            f"Regularize phosphates: {'ON' if run_regularize_phosphates else 'OFF'}\n"
             f"Delete hydrogens: {deleteH}\n"
             f"L-form inv/rot mirror: {'ON (' + invrot_operation + ')' if invrot_enabled else 'OFF'}\n"
         )
@@ -2600,6 +2795,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     param_overrides=param_overrides,
                     deleteH=deleteH,
                     run_phenix=run_phenix,
+                    run_regularize_phosphates=run_regularize_phosphates,
                 )
 
             elif na_type == "A-DNA":
@@ -2614,6 +2810,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     deleteH=deleteH,
                     run_phenix=run_phenix,
                     params_file=params_for_min,
+                    run_regularize_phosphates=run_regularize_phosphates,
                 )
 
             elif na_type == "A-RNA":
@@ -2628,6 +2825,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     deleteH=deleteH,
                     run_phenix=run_phenix,
                     params_file=params_for_min,
+                    run_regularize_phosphates=run_regularize_phosphates,
                 )
 
             elif na_type == "Z-DNA":

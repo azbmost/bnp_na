@@ -3,7 +3,8 @@
 
 Pipeline: write DSSR helical-parameter table -> DSSR rebuild with
 --backbone=B-DNA --par-type=heli -> normalize PDB naming -> optional
-phenix.geometry_minimization -> DSSR --more axis extraction -> align to +Z.
+phenix.geometry_minimization -> optional phosphate regularization ->
+DSSR --more axis extraction -> align to +Z.
 """
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from build_common import (
     write_helical_table,
 )
 from pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
+from regularize_phosphates import default_regularized_output_path, regularize_phosphates
 
 
 BACKBONE = "B-DNA"
@@ -55,11 +57,14 @@ def build_bdna(
     param_overrides: Optional[Dict[str, float]] = None,
     deleteH: bool = False,
     run_phenix: bool = True,
+    run_regularize_phosphates: Optional[bool] = None,
 ) -> Dict[str, object]:
     """Build B-DNA and return important output paths plus log text."""
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     logs = []
+    if run_regularize_phosphates is None:
+        run_regularize_phosphates = bool(run_phenix)
 
     try:
         seq_expanded = expand_sequence(seq_53, alphabet=sequence_alphabet(BACKBONE))
@@ -153,6 +158,21 @@ def build_bdna(
             "Skipped by user option.",
         ]
 
+    pdb_regularized = None
+    if run_regularize_phosphates:
+        try:
+            regularize_result = regularize_phosphates(
+                align_source,
+                default_regularized_output_path(align_source),
+            )
+            pdb_regularized = regularize_result.output_pdb
+            align_source = pdb_regularized
+            logs += ["\n" + regularize_result.log_text]
+        except Exception as exc:
+            raise PipelineError(f"Phosphate regularization failed: {exc}", "\n".join(logs)) from exc
+    else:
+        logs += ["\n=== Regularize phosphates ===", "Skipped by user option."]
+
     pdb_aligned = align_source.with_name(align_source.stem + "_aligned2Z" + align_source.suffix)
     try:
         align_report = align_pdb_to_Z(str(align_source), out_pdb=str(pdb_aligned), cwd=out_dir)
@@ -168,8 +188,10 @@ def build_bdna(
         "pdb_rebuild": pdb_rebuild,
         "pdb_normalized": pdb_norm,
         "pdb_minimized": pdb_min,
+        "pdb_regularized": pdb_regularized,
         "pdb_aligned": pdb_aligned,
         "run_phenix": run_phenix,
+        "run_regularize_phosphates": run_regularize_phosphates,
         "params_file": staged_params,
         "log_text": "\n".join(logs),
     }

@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.13`.
+The current app version is `V13.15`.
 
 ## What It Does
 
@@ -10,6 +10,7 @@ The current app version is `V13.13`.
 - Builds Z-DNA from a positive even base-pair length using DSSR fiber generation.
 - Lets you customize the 12 DSSR base-pair/helical parameters for B-DNA, A-DNA, and A-RNA.
 - Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
+- Optionally restores exact helical periodicity to every atom selected by `min_P_C5.params` after minimization using C1' atoms.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Aligns any input helix PDB to +Z from `Other tools`.
@@ -18,6 +19,7 @@ The current app version is `V13.13`.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
 - Combines multiple PDB files while assigning unique consecutive chain IDs in input order.
 - Reports and adds missing 5' and 3' terminal phosphates, with optional preceding 5'-terminal `O3'` atoms, from `Other tools`.
+- Regularizes phosphate groups in any suitable helix PDB from `Other tools`.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
 - Reports DSSR helical-axis start/end/unit-vector information for two selected PDB chains and optionally writes an axis BILD drawing.
 - Writes simple XYZ coordinate-axis BILD helpers with configurable arrow length and width.
@@ -443,6 +445,8 @@ Defaults:
 - A-RNA: minimization off.
 - Z-DNA: minimization not available in the GUI.
 
+The `Regularize phosphates` checkbox is directly below the minimization checkbox. Its defaults follow the same type-specific choices: on for B-DNA and off for A-DNA/A-RNA. When enabled, regularization runs after optional Phenix minimization and before DSSR align-to-Z.
+
 The params file defaults to:
 
 ```text
@@ -461,6 +465,19 @@ selection = name " P " or name " OP1" or name " OP2" or name " O5'" or name " C5
 The `link_distance_cutoff = 7.0` line relaxes the bond/link-distance interpretation threshold used by Phenix while reading the generated nucleic-acid PDB. The `selection` line targets phosphate and nearby sugar-backbone atoms for the geometry-minimization run: `P`, `OP1`, `OP2`, `O5'`, `C5'`, and `O3'`. It also includes old phosphate atom names `O1P` and `O2P`, in case a generated or imported PDB still uses that convention.
 
 When minimization is enabled, the app copies the params file into the intermediate output folder and runs Phenix there. The aligned input becomes the minimized PDB instead of the normalized PDB.
+
+Phosphate regularization fits one rigid one-residue helical transform per chain from consecutive C1' coordinates. It maps the movable atoms selected by `min_P_C5.params`—`P`, `OP1`, `OP2`, `O5'`, `C5'`, and `O3'` (plus the old `O1P`/`O2P` aliases)—into a common helical frame, averages their internal coordinates, and propagates each consensus position back along the helix. Regularizing the connected backbone atoms along with the phosphate atoms preserves periodic P–O5', O5'–C5', and O3'–P linkage geometry.
+
+The first nucleotide's `P/OP1/OP2/O5'/C5'` positions, the last nucleotide's terminal `O3'`, and any phosphate-only terminal residue are excluded from their initial consensus calculations. Those terminal atoms are regularized afterward from the corresponding internal positions.
+
+The same operation is available through `Other tools` > `Regularize phosphates`, or directly:
+
+```bash
+python3 bnp_na_lib/regularize_phosphates.py input.pdb \
+  -o input_regularized_phosphates.pdb
+```
+
+Each processed chain needs at least four C1' atoms and at least one complete nonterminal phosphate group.
 
 If Phenix is not found, either add `phenix.geometry_minimization` to `PATH` or set `PHENIX_ENV` to a Phenix environment script. The helper also checks the older default path:
 
@@ -578,7 +595,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.13 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.15 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -627,6 +644,18 @@ python3 bnp_na_lib/angle_helical_axisV2_2.py --gui
 The tool can define the helical axis in two ways.
 
 `Fit from PDB` uses PCA/SVD on selected axis atoms from a PDB. The default axis atom name is `C1'`, with `C1*` accepted as an alias. You can provide one or more axis atom names in the GUI or with `--axis-atoms`.
+
+To fit the axis from only selected residues, enter comma-separated ranges in the GUI's `Axis residue ranges` field or use `--axis_range` (also accepted as `--axis-range`), for example:
+
+```bash
+python3 bnp_na_lib/angle_helical_axisV2_2.py \
+  --pdb helix.pdb \
+  --axis_range "A1-A35,B60-B26" \
+  --point1 "A:5:C1'" \
+  --point2 "B:56:C1'"
+```
+
+All listed ranges contribute axis atoms to the PCA fit. The written start-to-end order of the first range determines the positive axis direction, so `A1-A35` and `A35-A1` produce opposite axis directions from the same selected residues. This direction controls the sign of the reported around-axis angle.
 
 `Custom axis` uses a point on the axis plus a direction vector. The direction vector is normalized automatically. In custom-axis mode, a PDB is not required unless one or both points are specified as atoms.
 
@@ -1109,6 +1138,7 @@ bnp_na.py                  Main GUI/controller
 CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/add_phosphates.py Terminal phosphate reporter and placement helper
+bnp_na_lib/regularize_phosphates.py C1'-derived phosphate helical-symmetry regularizer
 bnp_na_lib/combine_pdb.py   Multi-PDB combiner with chain/serial plus LINK/REMARK metadata updating
 bnp_na_lib/angle_helical_axisV2_2.py Helical-axis radial-angle and 2-fold symmetry-axis BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder

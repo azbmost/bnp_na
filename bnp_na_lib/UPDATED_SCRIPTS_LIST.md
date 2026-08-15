@@ -1,4 +1,4 @@
-# bnp_na V13.13 updated folder
+# bnp_na V13.16 updated folder
 
 Top-level app folder contains only:
 
@@ -16,6 +16,7 @@ Top-level app folder contains only:
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
+- `regularize_phosphates.py` — C1'-derived helical-symmetry regularizer for P/OP1/OP2/O5'/C5'/O3', including terminal propagation, a reusable API, and a direct CLI.
 - `combine_pdb.py` — combines multiple PDB coordinate files with consecutive A-Z chain IDs, global serial renumbering, remapped connectivity, and updated LINK/REMARK metadata.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_2.py` — helical-axis radial-angle and 2-fold symmetry-axis calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
@@ -31,6 +32,30 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.16 changes
+
+1. Version is `bnp_na V13.16`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `Regularize phosphates` appears directly below `Run phenix.geometry_minimization`; B-DNA defaults both options on, while A-DNA and A-RNA default both off.
+3. Each chain's one-residue screw transform is fitted from consecutive C1' positions.
+4. Internal P/OP1/OP2/O5'/C5'/O3' positions are transformed to a common helical frame and averaged, then their consensus coordinates are propagated to all internal and terminal positions.
+5. A standalone `Regularize phosphates` tool is available in `Other tools` and through `regularize_phosphates.py`.
+
+## V13.15 changes
+
+1. Version is `bnp_na V13.15`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `Measure angle around axis` accepts `--axis_range`/`--axis-range` and provides a matching GUI field.
+3. Comma-separated residue ranges restrict which axis atoms contribute to the fitted helical axis.
+4. The first range's written start-to-end order sets the positive axis direction and therefore the sign convention for around-axis angles.
+5. Regression tests cover range parsing, atom selection, direction reversal, and both CLI spellings.
+
+## V13.14 changes
+
+1. Version is `bnp_na V13.14`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. The `Measure angle around axis` file dialogs omit file-type restrictions on macOS to bypass an older Aqua Tk 8.6 UTType-conversion crash.
+3. The input dialog can still select any supported PDB-like file, and the output dialog retains `.bild` as its default extension.
+4. Other platforms retain their PDB/BILD file filters.
+5. Regression tests verify macOS input/output options and the cross-platform filter structure.
 
 ## V13.13 changes
 
