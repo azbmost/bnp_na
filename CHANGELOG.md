@@ -2,6 +2,27 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.17
+
+- Added an `Opposing phosphate X-disp` panel to the `Customize DSSR parameters` dialog for B-DNA.
+- `Find X-disp` searches for the X-disp that places opposing phosphate P atoms across the helix axis, comparing `A_i.P` with `B_(N+2-i).P` for `i = 2..N`, and writes the result into the X-disp field.
+- Every other parameter is held at the value currently shown in the dialog, so the search can be repeated for customized helices.
+- A `Refine with phenix.geometry_minimization + phosphate regularization` checkbox selects which pipeline the answer must match; it is pre-set from the main GUI's minimization and regularization checkboxes.
+- Unchecked runs the raw DSSR rebuild search only and takes a few seconds; checked matches the minimized build pipeline and takes a few minutes.
+- The search runs on a worker thread with progress mirrored to the main GUI log and a `Stop` button that ends it after the current model.
+- The panel is available for B-DNA only; A-DNA and A-RNA show a disabled button and a hint.
+- Added `bnp_na_lib/opposing_phosphate_xdisp.py` with a reusable API and a direct CLI, generalized from `test/oppo_phos_azbmost/find_opposing_phosphate_xdisp.py`.
+- The Phenix refinement seeds a Newton step from the raw-DSSR answer using the response slope measured during the raw sweep, then runs a secant iteration, because minimization moves the root by roughly 0.3 Å.
+- For the `A31` reference helix at the B-DNA defaults the tool reports `X-disp = 3.0872 Å` for the raw DSSR rebuild and `X-disp = 2.7992 Å` for the Phenix-minimized and phosphate-regularized workflow.
+- Added regression coverage for the pairing rule, the signed-cross sign convention, axis-line distance, the four-decimal selection rule, Newton/secant convergence, build caps, and cancellation.
+- Corrected the README app-version line, which still read `V13.15`.
+- Added a per-input `Chains` field to `Combine_PDB` for combining only selected chains from each file; blank or `all` keeps every chain, as before.
+- Each input row reports the chain IDs found in its chosen file, and `combine_pdb.py` gained a matching repeatable `--chains` option plus `list_pdb_chains`/`parse_chain_selection` helpers.
+- Selected chains keep their first-appearance order within a file, so a listed order does not reorder them; input-file order still controls chain order.
+- Coordinates, companion records, `CONECT` partners, `LINK` endpoints, and chain-bearing `REMARK`/`HET`/`HETNAM` metadata belonging to unselected chains are dropped, and the provenance remark records the skipped chains.
+- Renamed the tool to `Combine_PDB` in the main GUI, its dialog, and its log output.
+- Added regression coverage for chain filtering, `CONECT` partner pruning, blank-column `TER` handling, selection parsing, and the unknown-chain and selection-count errors.
+
 ## V13.16
 
 - Added a `Regularize phosphates` pipeline checkbox directly below `Run phenix.geometry_minimization`; its per-helix-type default follows the minimization default.

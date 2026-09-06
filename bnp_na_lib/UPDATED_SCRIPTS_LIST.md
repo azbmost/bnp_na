@@ -1,4 +1,4 @@
-# bnp_na V13.16 updated folder
+# bnp_na V13.17 updated folder
 
 Top-level app folder contains only:
 
@@ -17,7 +17,8 @@ Top-level app folder contains only:
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
 - `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
 - `regularize_phosphates.py` — C1'-derived helical-symmetry regularizer for P/OP1/OP2/O5'/C5'/O3', including terminal propagation, a reusable API, and a direct CLI.
-- `combine_pdb.py` — combines multiple PDB coordinate files with consecutive A-Z chain IDs, global serial renumbering, remapped connectivity, and updated LINK/REMARK metadata.
+- `opposing_phosphate_xdisp.py` — searches for the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for the raw DSSR rebuild or the Phenix-minimized and phosphate-regularized pipeline, with a reusable API and a direct CLI.
+- `combine_pdb.py` — combines multiple PDB coordinate files, optionally using only selected chains from each file, with consecutive A-Z chain IDs, global serial renumbering, remapped connectivity, and updated LINK/REMARK metadata.
 - `align2z.py` — DSSR-dependent align-to-Z module using `x3dna-dssr --more` point-one/point-two endpoints.
 - `angle_helical_axisV2_2.py` — helical-axis radial-angle and 2-fold symmetry-axis calculator with PDB-fit/custom-axis modes and Chimera/ChimeraX BILD output.
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
@@ -32,6 +33,18 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.17 changes
+
+1. Version is `bnp_na V13.17`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `Customize DSSR parameters` gained an `Opposing phosphate X-disp` panel with a `Find X-disp` button, for B-DNA only.
+3. The search holds every other dialog parameter fixed and writes its answer into the X-disp field.
+4. A checkbox selects the raw DSSR rebuild search or the slower Phenix-minimized and phosphate-regularized search, pre-set from the main GUI pipeline checkboxes.
+5. `opposing_phosphate_xdisp.py` provides the same search as a reusable API and a direct CLI.
+6. The `combine_PDB` tool is now named `Combine_PDB` in the main GUI and its dialog.
+7. Each `Combine_PDB` input row has a `Chains` field selecting which chains of that file are combined; blank or `all` keeps every chain.
+8. Unselected chains take their coordinates, `CONECT` partners, `LINK` endpoints, and chain-bearing `REMARK`/`HET` metadata with them, and the provenance remark lists the skipped chains.
+9. `combine_pdb.py` accepts a repeatable `--chains` option, given once per input file in input order.
 
 ## V13.16 changes
 

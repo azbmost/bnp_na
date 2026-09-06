@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.16: Building and placing nucleic acid helices.
+"""bnp_na V13.17: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import ast
 import math
+import queue
 import re
 import shlex
 import sys
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.16"
+__version__ = "V13.17"
 APP_NAME = "bnp_na"
 
 # Answer -v/--version before importing the GUI toolkit so that
@@ -49,7 +51,14 @@ from build_triplex import (  # noqa: E402
 )
 from build_zdna import build_zdna  # noqa: E402
 from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
-from combine_pdb import combine_pdb_files, default_combine_pdb_output_path  # noqa: E402
+from combine_pdb import (  # noqa: E402
+    combine_pdb_files,
+    default_combine_pdb_output_path,
+    format_chain_id as format_combine_chain_id,
+    format_chain_token as format_combine_chain_token,
+    list_pdb_chains,
+    parse_chain_selection as parse_combine_chain_selection,
+)
 from add_phosphates import (  # noqa: E402
     add_terminal_phosphates,
     analyze_phosphate_termini,
@@ -60,6 +69,11 @@ from add_phosphates import (  # noqa: E402
 from regularize_phosphates import (  # noqa: E402
     default_regularized_output_path,
     regularize_phosphates,
+)
+from opposing_phosphate_xdisp import (  # noqa: E402
+    OpposingPhosphateCancelled,
+    find_opposing_phosphate_xdisp,
+    format_result_report,
 )
 from angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
 from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
@@ -580,13 +594,13 @@ class App(tk.Tk):
             "XYZ axes BILD",
             "Create a coordinate-axis .bild helper with configurable origin, arrow length, arrow width, and origin marker.",
         ).grid(row=0, column=9, sticky="w", padx=(0, 8), pady=inner_y)
-        ttk.Button(tools, text="combine_PDB", command=self.open_combine_pdb_dialog).grid(
+        ttk.Button(tools, text="Combine_PDB", command=self.open_combine_pdb_dialog).grid(
             row=1, column=0, sticky="w", padx=(8, 4), pady=inner_y
         )
         self._make_help_button(
             tools,
-            "combine_PDB",
-            "Combine two or more PDB files. Source chains are assigned consecutive chain IDs A, B, C, ... in input-file and first-appearance order; LINK and chain-bearing REMARK records are updated automatically.",
+            "Combine_PDB",
+            "Combine two or more PDB files, optionally using only selected chains from each file. Kept source chains are assigned consecutive chain IDs A, B, C, ... in input-file and first-appearance order; LINK and chain-bearing REMARK records are updated automatically, and metadata for unselected chains is dropped.",
         ).grid(row=1, column=1, sticky="w", padx=(0, 10), pady=inner_y)
         ttk.Button(tools, text="Regularize phosphates", command=self.open_regularize_phosphates_dialog).grid(
             row=1, column=2, sticky="w", padx=(0, 4), pady=inner_y
@@ -1296,9 +1310,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
     def open_combine_pdb_dialog(self) -> None:
         win = tk.Toplevel(self)
         self._set_optional_window_icon(win)
-        win.title("combine_PDB")
-        win.geometry("880x680+220+120")
-        win.minsize(720, 560)
+        win.title("Combine_PDB")
+        win.geometry("980x720+220+120")
+        win.minsize(820, 600)
         win.grid_columnconfigure(1, weight=1)
         win.grid_rowconfigure(2, weight=1)
         win.grid_rowconfigure(5, weight=1)
@@ -1314,6 +1328,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         file_count_var = tk.StringVar(value="2")
         input_vars = [tk.StringVar(value="") for _index in range(26)]
+        chain_vars = [tk.StringVar(value="") for _index in range(26)]
+        chain_hint_vars = [tk.StringVar(value="blank = all chains") for _index in range(26)]
+        chain_scan_cache: Dict[Tuple[str, int], str] = {}
         output_var = tk.StringVar(value=str(default_combine_pdb_output_path(current_output_dir())))
 
         def set_dialog_log(text: str) -> None:
@@ -1323,6 +1340,26 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             result_text.see("1.0")
             result_text.configure(state="disabled")
             win.update_idletasks()
+
+        def refresh_chain_hint(index: int) -> None:
+            """Show the chain IDs found in the chosen file next to its chain field."""
+            text = input_vars[index].get().strip()
+            path = Path(text).expanduser() if text else None
+            try:
+                key = (str(path), path.stat().st_mtime_ns) if path else None
+            except OSError:
+                key = None
+            if key is None:
+                chain_hint_vars[index].set("blank = all chains")
+                return
+            found = chain_scan_cache.get(key)
+            if found is None:
+                try:
+                    found = ", ".join(format_combine_chain_id(chain) for chain in list_pdb_chains(path))
+                except Exception:
+                    found = ""
+                chain_scan_cache[key] = found
+            chain_hint_vars[index].set(f"in file: {found}" if found else "blank = all chains")
 
         def browse_input(index: int) -> None:
             current_text = input_vars[index].get().strip()
@@ -1357,6 +1394,19 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     text="Browse",
                     command=lambda input_index=index: browse_input(input_index),
                 ).grid(row=index, column=2, sticky="w", padx=(4, 8), pady=4)
+                ttk.Label(input_frame, text="Chains:").grid(
+                    row=index, column=3, sticky="e", padx=(4, 4), pady=4
+                )
+                ttk.Entry(input_frame, textvariable=chain_vars[index], width=12).grid(
+                    row=index, column=4, sticky="w", padx=(0, 4), pady=4
+                )
+                ttk.Label(
+                    input_frame,
+                    textvariable=chain_hint_vars[index],
+                    style="Hint.TLabel",
+                    width=22,
+                ).grid(row=index, column=5, sticky="w", padx=(0, 8), pady=4)
+                refresh_chain_hint(index)
             input_frame.update_idletasks()
             input_canvas.configure(scrollregion=input_canvas.bbox("all"))
             input_canvas.yview_moveto(0.0)
@@ -1380,11 +1430,13 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             try:
                 count = int(file_count_var.get())
                 input_paths: List[Path] = []
+                chain_selections: List[Optional[List[str]]] = []
                 for index in range(count):
                     value = input_vars[index].get().strip()
                     if not value:
                         raise ValueError(f"Please choose input PDB {index + 1}.")
                     input_paths.append(Path(value).expanduser())
+                    chain_selections.append(parse_combine_chain_selection(chain_vars[index].get()))
 
                 output_text = output_var.get().strip()
                 if not output_text:
@@ -1393,9 +1445,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
                 run_btn.configure(state="disabled")
                 win.update_idletasks()
-                result = combine_pdb_files(input_paths, output_path)
+                result = combine_pdb_files(input_paths, output_path, chain_selections)
             except Exception as exc:
-                messagebox.showerror("combine_PDB", str(exc), parent=win)
+                messagebox.showerror("Combine_PDB", str(exc), parent=win)
                 return
             finally:
                 try:
@@ -1407,12 +1459,21 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 "python3",
                 "bnp_na_lib/combine_pdb.py",
                 *[str(path) for path in result.input_pdbs],
-                "-o",
-                str(result.output_pdb),
             ]
+            if any(selection is not None for selection in chain_selections):
+                for selection in chain_selections:
+                    cli_args.extend(
+                        [
+                            "--chains",
+                            " ".join(format_combine_chain_token(chain) for chain in selection)
+                            if selection
+                            else "all",
+                        ]
+                    )
+            cli_args.extend(["-o", str(result.output_pdb)])
             log = "\n".join(
                 [
-                    "=== combine_PDB tool ===",
+                    "=== Combine_PDB tool ===",
                     "Equivalent CLI command:",
                     "  " + " ".join(shlex.quote(part) for part in cli_args),
                     "",
@@ -1422,7 +1483,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             set_dialog_log(result.log_text)
             self._append_log(log)
             messagebox.showinfo(
-                "combine_PDB",
+                "Combine_PDB",
                 f"Combined {len(result.input_pdbs)} PDB files into {result.chain_count} chains.\n\n"
                 f"Wrote:\n{result.output_pdb}",
                 parent=win,
@@ -1464,12 +1525,15 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         ttk.Label(
             win,
-            text="Chains are detected in first-appearance order within each file and renamed A-Z across all inputs. "
-            "The same PDB may be selected more than once; every occurrence receives fresh chain IDs. "
-            "LINK endpoints and recognized chain-bearing REMARK/HET metadata are updated too. "
-            "The PDB format limits the combined output to 26 chains.",
+            text="Leave a Chains field blank (or type all) to use every chain of that file; otherwise list the "
+            "chain IDs to keep, such as A B or A,B, using _ for a blank chain ID. Selected chains are detected "
+            "in first-appearance order within each file and renamed A-Z across all inputs, so the order you type "
+            "them in does not reorder them. Coordinates, LINK endpoints, and chain-bearing REMARK/HET metadata "
+            "belonging to unselected chains are dropped. The same PDB may be selected more than once, with a "
+            "different chain selection each time; every occurrence receives fresh chain IDs. The PDB format "
+            "limits the combined output to 26 chains.",
             style="Hint.TLabel",
-            wraplength=820,
+            wraplength=920,
             justify="left",
         ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(2, 4))
 
@@ -1487,8 +1551,15 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         result_text.grid(row=5, column=0, columnspan=3, sticky="nsew", padx=10, pady=(2, 8))
         result_text.configure(state="disabled")
 
+        for index in range(len(input_vars)):
+            input_vars[index].trace_add(
+                "write", lambda *_args, row=index: refresh_chain_hint(row)
+            )
         render_input_fields()
-        set_dialog_log("Choose two or more PDB files. Input order determines the new chain-ID order.")
+        set_dialog_log(
+            "Choose two or more PDB files. Input order determines the new chain-ID order, and each file's "
+            "Chains field selects which of its chains are combined (blank = all)."
+        )
 
     def open_regularize_phosphates_dialog(self) -> None:
         win = tk.Toplevel(self)
@@ -2586,8 +2657,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         win = tk.Toplevel(self)
         self._set_optional_window_icon(win)
         win.title(f"Customize DSSR parameters — {na_type}")
-        win.geometry("960x500+180+120")
-        win.minsize(860, 430)
+        win.geometry("960x600+180+120")
+        win.minsize(860, 530)
         win.transient(self)
         win.grab_set()
 
@@ -2617,6 +2688,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             ttk.Label(win, text=f"default {_format_number(default)} {PARAM_UNITS.get(key, '')}", style="Hint.TLabel").grid(
                 row=row, column=col_group + 2, sticky="w", padx=(0, 12), pady=4
             )
+
+        self._build_xdisp_finder(win, na_type, defaults, local_vars)
 
         btns = ttk.Frame(win)
         btns.grid(row=8, column=0, columnspan=6, sticky="e", padx=12, pady=8)
@@ -2650,6 +2723,186 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         ttk.Button(btns, text="Restore defaults", command=restore_defaults).pack(side="left", padx=6)
         ttk.Button(btns, text="Cancel", command=win.destroy).pack(side="left", padx=6)
         ttk.Button(btns, text="Save", command=save_close).pack(side="left", padx=6)
+
+    def _build_xdisp_finder(
+        self,
+        win: tk.Toplevel,
+        na_type: str,
+        defaults: List[float],
+        local_vars: Dict[str, tk.StringVar],
+    ) -> None:
+        """Add the opposing-phosphate X-disp search panel to the parameter dialog.
+
+        The search builds many helices, so it runs on a worker thread and reports
+        back through a queue drained on the Tk thread.
+        """
+        frame = ttk.LabelFrame(win, text="Opposing phosphate X-disp")
+        frame.grid(row=7, column=0, columnspan=6, sticky="ew", padx=14, pady=(12, 4))
+        frame.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(
+            frame,
+            text=(
+                "Searches for the X-disp that places opposing phosphate P atoms across the helix axis, "
+                "holding every other parameter at the value shown above. The result is written into the "
+                "X-disp field."
+            ),
+            wraplength=880,
+            style="Hint.TLabel",
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=10, pady=(6, 4))
+
+        refine_var = tk.BooleanVar(
+            value=bool(self.minimize_var.get() and self.regularize_phosphates_var.get())
+        )
+        refine_check = ttk.Checkbutton(
+            frame,
+            text="Refine with phenix.geometry_minimization + phosphate regularization",
+            variable=refine_var,
+        )
+        refine_check.grid(row=1, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 2))
+
+        ttk.Label(
+            frame,
+            text=(
+                "Off: raw DSSR rebuild only, a few seconds. "
+                "On: matches the minimized build pipeline and takes a few minutes."
+            ),
+            wraplength=880,
+            style="Hint.TLabel",
+            justify="left",
+        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=30, pady=(0, 4))
+
+        status_var = tk.StringVar(value="")
+        # Tk drops a variable as soon as Python does, and on the disabled path
+        # below no closure keeps these alive. Anchor them to the dialog.
+        frame.xdisp_vars = (refine_var, status_var)  # type: ignore[attr-defined]
+
+        run_btn = ttk.Button(frame, text="Find X-disp")
+        stop_btn = ttk.Button(frame, text="Stop", state="disabled")
+        run_btn.grid(row=3, column=0, sticky="w", padx=10, pady=(2, 8))
+        stop_btn.grid(row=3, column=1, sticky="w", padx=(0, 10), pady=(2, 8))
+        ttk.Label(frame, textvariable=status_var, style="Hint.TLabel").grid(
+            row=3, column=2, sticky="w", padx=(4, 10), pady=(2, 8)
+        )
+
+        if na_type != "B-DNA":
+            refine_check.configure(state="disabled")
+            run_btn.configure(state="disabled")
+            status_var.set(f"Available for B-DNA only; {na_type} is selected.")
+            return
+
+        state: Dict[str, object] = {"worker": None, "cancel": False, "queue": queue.Queue()}
+
+        def collect_fixed_overrides() -> Dict[str, float]:
+            overrides: Dict[str, float] = {}
+            for key, default in zip(PARAM_KEYS, defaults):
+                if key == "X-disp":
+                    continue
+                text = local_vars[key].get().strip()
+                if not text:
+                    continue
+                value = _parse_float_expression(text, PARAM_LABELS.get(key, key))
+                if abs(value - float(default)) > 1e-10:
+                    overrides[key] = value
+            return overrides
+
+        def set_running(running: bool) -> None:
+            run_btn.configure(state="disabled" if running else "normal")
+            stop_btn.configure(state="normal" if running else "disabled")
+            refine_check.configure(state="disabled" if running else "normal")
+
+        def finish(result: Dict[str, object]) -> None:
+            self._append_log(format_result_report(result))
+            x_value = float(result["recommended_x_disp"])
+            local_vars["X-disp"].set(f"{x_value:.4f}")
+            mode = "Phenix + regularized" if result["recommended_mode"] == "phenix" else "raw DSSR"
+            status_var.set(f"X-disp set to {x_value:.4f} Å ({mode}).")
+
+        def poll() -> None:
+            finished = False
+            try:
+                while True:
+                    kind, payload = state["queue"].get_nowait()  # type: ignore[attr-defined]
+                    if kind == "log":
+                        self._append_log(str(payload))
+                        status_var.set(str(payload).strip()[:90])
+                    elif kind == "done":
+                        finish(payload)
+                        finished = True
+                    elif kind == "cancelled":
+                        self._append_log("Opposing phosphate X-disp search cancelled.")
+                        status_var.set("Cancelled.")
+                        finished = True
+                    elif kind == "error":
+                        self._append_log(f"Opposing phosphate X-disp search failed: {payload}")
+                        status_var.set("Search failed.")
+                        finished = True
+                        if win.winfo_exists():
+                            messagebox.showerror("X-disp search", str(payload), parent=win)
+            except queue.Empty:
+                pass
+
+            if not win.winfo_exists():
+                return
+            if finished:
+                state["worker"] = None
+                set_running(False)
+                return
+            win.after(150, poll)
+
+        def start() -> None:
+            worker = state.get("worker")
+            if worker is not None and worker.is_alive():  # type: ignore[union-attr]
+                return
+            try:
+                seq = self.seq_var.get().strip()
+                if not seq:
+                    raise ValueError("Enter a sequence in the main window before searching.")
+                fixed_overrides = collect_fixed_overrides()
+                refine = bool(refine_var.get())
+                params_file = self._validate_params_for_minimization(refine)
+            except Exception as exc:
+                messagebox.showerror("Input error", str(exc), parent=win)
+                return
+
+            state["cancel"] = False
+            set_running(True)
+            status_var.set("Searching...")
+            self._append_log(
+                "=== Opposing phosphate X-disp search started ===\n"
+                f"Sequence: {seq}\n"
+                f"Refine with Phenix + phosphate regularization: {refine}"
+            )
+
+            def work() -> None:
+                try:
+                    result = find_opposing_phosphate_xdisp(
+                        seq,
+                        params_file=params_file,
+                        fixed_overrides=fixed_overrides,
+                        refine_with_phenix=refine,
+                        progress=lambda message: state["queue"].put(("log", message)),  # type: ignore[attr-defined]
+                        should_cancel=lambda: bool(state["cancel"]),
+                    )
+                except OpposingPhosphateCancelled:
+                    state["queue"].put(("cancelled", None))  # type: ignore[attr-defined]
+                except Exception as exc:
+                    state["queue"].put(("error", str(exc)))  # type: ignore[attr-defined]
+                else:
+                    state["queue"].put(("done", result))  # type: ignore[attr-defined]
+
+            state["worker"] = threading.Thread(target=work, daemon=True)
+            state["worker"].start()  # type: ignore[union-attr]
+            win.after(150, poll)
+
+        def stop() -> None:
+            state["cancel"] = True
+            status_var.set("Stopping after the current model...")
+
+        run_btn.configure(command=start)
+        stop_btn.configure(command=stop)
+        win.protocol("WM_DELETE_WINDOW", lambda: (state.__setitem__("cancel", True), win.destroy()))
 
     def _get_param_overrides(self) -> Dict[str, float]:
         defaults = self._current_defaults()

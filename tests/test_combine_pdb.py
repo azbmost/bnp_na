@@ -4,7 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from bnp_na_lib.combine_pdb import CombinePDBError, combine_pdb_files
+from bnp_na_lib.combine_pdb import (
+    CombinePDBError,
+    combine_pdb_files,
+    list_pdb_chains,
+    parse_chain_selection,
+)
 
 
 def atom_line(serial: int, chain: str, resseq: int, x: float = 0.0) -> str:
@@ -202,6 +207,193 @@ class CombinePDBTests(unittest.TestCase):
             self.assertEqual(result.atom_count, 4)
             self.assertEqual(result.remark_count, 4)
             self.assertEqual(result.link_count, 2)
+
+    def test_chain_selection_keeps_only_the_requested_chains(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.pdb"
+            second = root / "second.pdb"
+            output = root / "combined.pdb"
+            first.write_text(
+                "".join(
+                    [
+                        atom_line(10, "X", 1, 1.25),
+                        anisou_line(10, "X", 1),
+                        ter_line(11, "X", 1),
+                        atom_line(20, "Y", 1, 2.5),
+                        ter_line(21, "Y", 1),
+                        "CONECT   10   20\n",
+                        "END\n",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            second.write_text(
+                "".join(
+                    [
+                        "REMARK 950 RE_SCRIPT SOFTWARE name=re_helix version=V3.17\n",
+                        "REMARK 950 RE_SCRIPT COMMAND text=re_helix.py input.pdb 13A A:1:DA\n",
+                        "REMARK 950 RE_SCRIPT CHAIN_RANGE chain=A start=A:1:DA end=A:2:DT count=2\n",
+                        "REMARK 950 RE_SCRIPT SPECIAL event=standalone_x33 chain=A source=A:9 "
+                        "residue=A:2:X33\n",
+                        "REMARK BNP_NA_L_RESIDUE KIND L-DNA CHAIN A RESSEQ 1 ICODE . RESNAME DA\n",
+                        "REMARK    A.DA1 [A-T] A.DT2\n",
+                        het_line("A", 2),
+                        "HETNAM     X33 3'-3' PHOSPHODIESTER LINKER PHOSPHATE\n",
+                        link_line("A", 1, "A", 2),
+                        atom_line(5, "A", 1, 3.75),
+                        atom_line(6, " ", 2, 4.0),
+                        "END\n",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = combine_pdb_files([first, second], output, ["Y", "_"])
+            lines = output.read_text(encoding="utf-8").splitlines()
+            atoms = [line for line in lines if line.startswith("ATOM  ")]
+
+            self.assertEqual([line[21] for line in atoms], ["A", "B"])
+            self.assertEqual([int(line[6:11]) for line in atoms], [1, 3])
+            self.assertEqual([float(line[30:38]) for line in atoms], [2.5, 4.0])
+            self.assertEqual([line[21] for line in lines if line.startswith("TER   ")], ["A"])
+
+            # The excluded chains take their coordinates and metadata with them.
+            self.assertEqual([line for line in lines if line.startswith("ANISOU")], [])
+            self.assertEqual([line for line in lines if line.startswith("CONECT")], [])
+            self.assertEqual([line for line in lines if line.startswith("LINK  ")], [])
+            self.assertEqual([line for line in lines if line.startswith("HET   ")], [])
+            self.assertEqual([line for line in lines if line.startswith("HETNAM")], [])
+            self.assertNotIn("CHAIN_RANGE", output.read_text(encoding="utf-8"))
+            self.assertNotIn("BNP_NA_L_RESIDUE", output.read_text(encoding="utf-8"))
+            self.assertNotIn("[A-T]", output.read_text(encoding="utf-8"))
+
+            # Provenance that names no current chain is still preserved verbatim.
+            self.assertIn("REMARK 950 RE_SCRIPT SOFTWARE name=re_helix version=V3.17", lines)
+            self.assertIn("REMARK 950 RE_SCRIPT COMMAND text=re_helix.py input.pdb 13A A:1:DA", lines)
+
+            self.assertIn(
+                "REMARK BNP_NA_COMBINE_PDB INPUT 1 first.pdb CHAINS Y->A SKIPPED X", lines
+            )
+            self.assertIn(
+                "REMARK BNP_NA_COMBINE_PDB INPUT 2 second.pdb CHAINS (blank)->B SKIPPED A", lines
+            )
+            self.assertEqual(result.chain_count, 2)
+            self.assertEqual(result.atom_count, 2)
+            self.assertEqual(result.remark_count, 2)
+            self.assertEqual(result.link_count, 0)
+            self.assertEqual(result.mappings[0].excluded_chains, ("X",))
+            self.assertEqual(result.mappings[1].excluded_chains, ("A",))
+
+    def test_chain_selection_prunes_dropped_conect_partners(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.pdb"
+            second = root / "second.pdb"
+            output = root / "combined.pdb"
+            first.write_text(
+                "".join(
+                    [
+                        atom_line(1, "P", 1, 1.0),
+                        atom_line(2, "P", 2, 2.0),
+                        atom_line(3, "Q", 1, 3.0),
+                        "CONECT    1    2    3\n",
+                        "END\n",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            second.write_text(atom_line(1, "Z", 1, 4.0), encoding="utf-8")
+
+            result = combine_pdb_files([first, second], output, ["P", None])
+            lines = output.read_text(encoding="utf-8").splitlines()
+            conect = [line for line in lines if line.startswith("CONECT")]
+
+            self.assertEqual(conect, ["CONECT    1    2"])
+            self.assertEqual(
+                [line[21] for line in lines if line.startswith("ATOM  ")], ["A", "A", "B"]
+            )
+            self.assertEqual(result.chain_count, 2)
+            self.assertEqual(result.atom_count, 3)
+
+    def test_chain_selection_keeps_ter_records_with_a_blank_chain_column(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.pdb"
+            second = root / "second.pdb"
+            output = root / "combined.pdb"
+            first.write_text(
+                "".join(
+                    [
+                        atom_line(1, "X", 1, 1.0),
+                        ter_line(2, " ", 1),
+                        atom_line(3, "Y", 1, 2.0),
+                        ter_line(4, " ", 1),
+                        "END\n",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            second.write_text(atom_line(1, "Z", 1, 3.0), encoding="utf-8")
+
+            combine_pdb_files([first, second], output, ["Y", "all"])
+            lines = output.read_text(encoding="utf-8").splitlines()
+            serial_records = [
+                line for line in lines if line.startswith(("ATOM  ", "TER   "))
+            ]
+
+            self.assertEqual(
+                [(line[:6], int(line[6:11]), line[21]) for line in serial_records],
+                [("ATOM  ", 1, "A"), ("TER   ", 2, "A"), ("ATOM  ", 3, "B")],
+            )
+
+    def test_rejects_a_chain_that_is_not_in_the_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.pdb"
+            second = root / "second.pdb"
+            first.write_text(atom_line(1, "X", 1), encoding="utf-8")
+            second.write_text(atom_line(1, "Y", 1), encoding="utf-8")
+            with self.assertRaisesRegex(CombinePDBError, r"has no chain Z; its chains are X\."):
+                combine_pdb_files([first, second], root / "combined.pdb", ["Z", None])
+
+    def test_rejects_a_chain_selection_count_that_misses_an_input(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.pdb"
+            second = root / "second.pdb"
+            first.write_text(atom_line(1, "X", 1), encoding="utf-8")
+            second.write_text(atom_line(1, "Y", 1), encoding="utf-8")
+            with self.assertRaisesRegex(CombinePDBError, "given for 1 inputs, but 2 input PDB files"):
+                combine_pdb_files([first, second], root / "combined.pdb", ["X"])
+
+    def test_parse_chain_selection_accepts_the_documented_forms(self) -> None:
+        self.assertIsNone(parse_chain_selection(""))
+        self.assertIsNone(parse_chain_selection("   "))
+        self.assertIsNone(parse_chain_selection("all"))
+        self.assertIsNone(parse_chain_selection("*"))
+        self.assertEqual(parse_chain_selection("A B"), ["A", "B"])
+        self.assertEqual(parse_chain_selection("A,B,A"), ["A", "B"])
+        self.assertEqual(parse_chain_selection("_"), [" "])
+        self.assertEqual(parse_chain_selection("blank C"), [" ", "C"])
+        with self.assertRaisesRegex(CombinePDBError, "not a single-character PDB chain ID"):
+            parse_chain_selection("AB")
+
+    def test_list_pdb_chains_reports_first_appearance_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.pdb"
+            source.write_text(
+                "".join(
+                    [
+                        atom_line(1, "Y", 1),
+                        atom_line(2, "X", 1),
+                        atom_line(3, "Y", 2),
+                        atom_line(4, " ", 1),
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            self.assertEqual(list_pdb_chains(source), ["Y", "X", " "])
 
     def test_rejects_more_than_26_chains(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

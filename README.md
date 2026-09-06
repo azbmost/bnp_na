@@ -2,13 +2,14 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.15`.
+The current app version is `V13.17`.
 
 ## What It Does
 
 - Builds B-DNA, A-DNA, and A-RNA from a 5' to 3' sequence using DSSR helical-parameter tables.
 - Builds Z-DNA from a positive even base-pair length using DSSR fiber generation.
 - Lets you customize the 12 DSSR base-pair/helical parameters for B-DNA, A-DNA, and A-RNA.
+- Finds the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for either the raw DSSR rebuild or the minimized and phosphate-regularized pipeline.
 - Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
 - Optionally restores exact helical periodicity to every atom selected by `min_P_C5.params` after minimization using C1' atoms.
 - Normalizes nucleotide residue and atom names in generated PDB files.
@@ -17,7 +18,7 @@ The current app version is `V13.15`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
-- Combines multiple PDB files while assigning unique consecutive chain IDs in input order.
+- Combines multiple PDB files, optionally using only selected chains from each file, while assigning unique consecutive chain IDs in input order.
 - Reports and adds missing 5' and 3' terminal phosphates, with optional preceding 5'-terminal `O3'` atoms, from `Other tools`.
 - Regularizes phosphate groups in any suitable helix PDB from `Other tools`.
 - Measures around-axis angles between two atom or XYZ points and writes Chimera/ChimeraX BILD drawings.
@@ -91,7 +92,7 @@ For B-Z junction constructs, click the `B-Z builder` button on the same row as t
 
 For triplex construction from an existing duplex PDB, click the `Triplex converter` button directly to the right of `B-Z builder`.
 
-To merge existing coordinate files, click `combine_PDB` in `Other tools`, choose the number of inputs, and fill the dynamically generated PDB fields in the desired chain order.
+To merge existing coordinate files, click `Combine_PDB` in `Other tools`, choose the number of inputs, and fill the dynamically generated PDB fields in the desired chain order. Each field has its own `Chains` box for combining only part of a file.
 
 ## GUI Field Guide
 
@@ -434,6 +435,54 @@ Buttons in the parameter dialog:
 
 Only values that differ from the built-in defaults are reported as GUI overrides in the log.
 
+### Opposing Phosphate X-disp
+
+`bnp_na` V13.17 adds an `Opposing phosphate X-disp` panel at the bottom of the `Customize DSSR parameters` dialog. It searches for the X-disp value that places opposing phosphate `P` atoms on opposite sides of the helix axis, then writes that value into the `X-disp` field.
+
+The panel is available for B-DNA only. A-DNA and A-RNA show a disabled button and a hint.
+
+After alignment to +Z the DSSR helix axis is the z-axis through `x = 0, y = 0`. For an `N`-bp helix the search compares `A_i.P` with `B_(N+2-i).P` for `i = 2..N`, so in a 31-bp helix `A2.P` is compared with `B31.P`. For every opposing pair it measures:
+
+- the signed xy cross product `A_x * B_y - A_y * B_x`;
+- the perpendicular distance from the z-axis to the xy-projected P-P line;
+- the around-axis angle between the two `P` atoms.
+
+The target is a signed cross product of 0, an axis-line distance of 0 Å, and an around-axis angle of 180°. Among four-decimal candidates the tool selects the smallest RMS axis-line distance, breaking ties on the smallest residual cross product.
+
+Every parameter other than X-disp is held at the value currently shown in the dialog, so the search can be repeated for a customized helix. Blank fields use the built-in default. The sequence comes from the main GUI, so enter it before searching.
+
+The `Refine with phenix.geometry_minimization + phosphate regularization` checkbox selects which pipeline the answer has to match. It is pre-set from the main GUI's minimization and regularization checkboxes:
+
+- Unchecked runs the raw DSSR rebuild search only. This takes a few seconds.
+- Checked also runs the minimized and phosphate-regularized pipeline. This takes a few minutes because every trial value costs a full minimization, and it requires a valid params file in the main GUI.
+
+Two answers exist for the same helix because minimization relaxes the phosphate and sugar geometry after the DSSR rebuild, which moves the root by roughly 0.3 Å. Use the raw DSSR value for an ideal DSSR parameter-generated helix, and the refined value when the model will be passed through minimization. For the `A31` reference helix at the B-DNA defaults:
+
+```text
+Raw DSSR rebuild only                            : X-disp = 3.0872 Å
+Phenix minimization + phosphate regularization   : X-disp = 2.7992 Å
+```
+
+The search runs on a worker thread. Progress for every trial model is mirrored to the main GUI log, and `Stop` ends the search after the model currently being built.
+
+Results can be sequence-dependent at the small residual level, because DSSR uses base-specific templates and PDB coordinates are written to 0.001 Å. Rerun the search for the exact sequence you care about.
+
+#### Direct Command-Line Use
+
+The same search is available as `bnp_na_lib/opposing_phosphate_xdisp.py`:
+
+```bash
+python3 bnp_na_lib/opposing_phosphate_xdisp.py --seq A31
+```
+
+Add `--phenix` for the minimized and phosphate-regularized answer, and repeat `--param KEY=VALUE` to hold other parameters fixed:
+
+```bash
+python3 bnp_na_lib/opposing_phosphate_xdisp.py --seq A31 --param h-Twist=30 --phenix
+```
+
+`--dssr-x-min`, `--dssr-x-max`, and `--dssr-x-step` control the coarse scan when a customized helix puts the root outside the default 0 to 8 Å range. `--max-phenix-builds` caps how many minimizations the refinement may run. Do not pass `X-disp` to `--param`; it is the searched value.
+
 ## Phenix Geometry Minimization
 
 The `phenix.geometry_minimization` section controls whether the normalized PDB is minimized before align-to-Z.
@@ -595,7 +644,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.15 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.17 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -868,9 +917,9 @@ python3 bnp_na_lib/helical_axis_info.py -i model.pdb \
   --reference-vector-length 20
 ```
 
-## combine_PDB Tool
+## Combine_PDB Tool
 
-`bnp_na` V13.11 introduced a `combine_PDB` button in the main GUI's `Other tools` section. It combines two or more PDB coordinate files into one structure without changing any atomic coordinates. V13.12 adds automatic preservation and chain-ID updating for `LINK`, `REMARK`, and related linker-residue metadata.
+`bnp_na` V13.11 introduced a `Combine_PDB` button in the main GUI's `Other tools` section. It combines two or more PDB coordinate files into one structure without changing any atomic coordinates. V13.12 adds automatic preservation and chain-ID updating for `LINK`, `REMARK`, and related linker-residue metadata. V13.17 adds per-file chain selection.
 
 Choose the number of input files from the dropdown. The dialog immediately displays that many input fields in a scrollable area and retains paths when the count is temporarily reduced. Input order controls chain order. Within each PDB, chains are detected from `ATOM` and `HETATM` records in first-appearance order.
 
@@ -881,7 +930,9 @@ Input 1: A, B, C
 Input 2: D, E, F, G
 ```
 
-The source chain names do not affect the new names. Blank source chain IDs are treated as real chains. Because the traditional PDB chain field is one character, the combined output is limited to 26 chains (`A` through `Z`). The same PDB file may be entered repeatedly in two or more input fields. Every occurrence is treated as a separate copy and receives fresh chain IDs; for example, repeating the same two-chain PDB twice produces chains `A/B` and then `C/D`. The output cannot overwrite an input file.
+Each input row also has a `Chains` field that selects which of that file's chains are combined. Leaving it blank, or typing `all`, uses every chain; otherwise list the chain IDs to keep, such as `A B` or `A,B`, using `_` for a chain with a blank chain ID. The field shows the chain IDs found in the chosen file so the available choices are visible. Selected chains keep their first-appearance order within the file, so the order you type them in does not reorder them; use the input-file order to control chain order. Coordinates, `LINK` endpoints, `CONECT` partners, and chain-bearing `REMARK`/`HET` metadata belonging to unselected chains are dropped, and the provenance remark records the skipped chains.
+
+The source chain names do not affect the new names. Blank source chain IDs are treated as real chains. Because the traditional PDB chain field is one character, the combined output is limited to 26 chains (`A` through `Z`). The same PDB file may be entered repeatedly in two or more input fields. Every occurrence is treated as a separate copy and receives fresh chain IDs; for example, repeating the same two-chain PDB twice produces chains `A/B` and then `C/D`, and each occurrence can select a different chain. The output cannot overwrite an input file.
 
 The output contains the combined `ATOM`, `HETATM`, `TER`, `ANISOU`, `SIGATM`, `SIGUIJ`, and `CONECT` data plus `REMARK BNP_NA_COMBINE_PDB` provenance. Atom/TER serials are renumbered globally, companion serials and `CONECT` references are remapped, source `MODEL` wrappers are removed, and one final `END` record is written. Multi-model inputs with more than one `MODEL` are rejected so separate models are not accidentally flattened into one structure.
 
@@ -891,6 +942,14 @@ You can also run it directly, listing inputs in the desired order:
 
 ```bash
 python3 bnp_na_lib/combine_pdb.py first.pdb second.pdb third.pdb \
+  -o combine_PDB_out.pdb
+```
+
+Add `--chains` once per input file, in the same order as the inputs, to select chains from the command line. Use `all` for a file that contributes every chain:
+
+```bash
+python3 bnp_na_lib/combine_pdb.py first.pdb second.pdb third.pdb \
+  --chains "A B" --chains all --chains C \
   -o combine_PDB_out.pdb
 ```
 
@@ -1139,7 +1198,7 @@ CHANGELOG.md               Version-by-version change log
 bnp_na_lib/                Build, alignment, placement, and PDB helpers
 bnp_na_lib/add_phosphates.py Terminal phosphate reporter and placement helper
 bnp_na_lib/regularize_phosphates.py C1'-derived phosphate helical-symmetry regularizer
-bnp_na_lib/combine_pdb.py   Multi-PDB combiner with chain/serial plus LINK/REMARK metadata updating
+bnp_na_lib/combine_pdb.py   Multi-PDB combiner with per-file chain selection, chain/serial plus LINK/REMARK metadata updating
 bnp_na_lib/angle_helical_axisV2_2.py Helical-axis radial-angle and 2-fold symmetry-axis BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
 bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter
