@@ -2,14 +2,14 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.17`.
+The current app version is `V13.18`.
 
 ## What It Does
 
 - Builds B-DNA, A-DNA, and A-RNA from a 5' to 3' sequence using DSSR helical-parameter tables.
 - Builds Z-DNA from a positive even base-pair length using DSSR fiber generation.
 - Lets you customize the 12 DSSR base-pair/helical parameters for B-DNA, A-DNA, and A-RNA.
-- Finds the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for either the raw DSSR rebuild or the minimized and phosphate-regularized pipeline.
+- Optionally finds the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for either the raw DSSR rebuild or the minimized and phosphate-regularized pipeline; off by default and only needed for "ideal helix" work.
 - Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
 - Optionally restores exact helical periodicity to every atom selected by `min_P_C5.params` after minimization using C1' atoms.
 - Normalizes nucleotide residue and atom names in generated PDB files.
@@ -439,7 +439,9 @@ Only values that differ from the built-in defaults are reported as GUI overrides
 
 `bnp_na` V13.17 adds an `Opposing phosphate X-disp` panel at the bottom of the `Customize DSSR parameters` dialog. It searches for the X-disp value that places opposing phosphate `P` atoms on opposite sides of the helix axis, then writes that value into the `X-disp` field.
 
-The panel is available for B-DNA only. A-DNA and A-RNA show a disabled button and a hint.
+This is rarely needed. It is only useful for building the "ideal helix" presumed by many DNA nanostructure designs; ordinary helix building does not require it. V13.18 therefore makes the panel opt-in: the checkbox in the `Opposing phosphate X-disp` group title is the on/off switch, and it starts off. `Find X-disp` and the refinement checkbox stay disabled until you tick it. The setting is not remembered between openings of the dialog, so the search is off again the next time. While a search is running the enable checkbox is locked, so the pipeline cannot change underneath a job already in flight.
+
+The panel is available for B-DNA only. A-DNA and A-RNA show a disabled title checkbox and a hint.
 
 After alignment to +Z the DSSR helix axis is the z-axis through `x = 0, y = 0`. For an `N`-bp helix the search compares `A_i.P` with `B_(N+2-i).P` for `i = 2..N`, so in a 31-bp helix `A2.P` is compared with `B31.P`. For every opposing pair it measures:
 
@@ -644,7 +646,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.17 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.18 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA

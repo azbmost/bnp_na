@@ -2,6 +2,14 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.18
+
+- The `Opposing phosphate X-disp` panel in `Customize DSSR parameters` is now opt-in and starts switched off.
+- The checkbox sits in the group title, so the box that names `Opposing phosphate X-disp` is the switch that turns it on; `Find X-disp` and the Phenix refinement checkbox stay disabled until it is ticked.
+- Added a panel warning that the search is rarely needed and is only useful for building the "ideal helix" presumed by many DNA nanostructure designs.
+- The title checkbox is locked while a search is running, so the pipeline cannot change underneath a job already in flight.
+- For A-DNA and A-RNA the title checkbox itself is disabled, replacing the previously disabled button.
+
 ## V13.17
 
 - Added an `Opposing phosphate X-disp` panel to the `Customize DSSR parameters` dialog for B-DNA.

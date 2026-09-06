@@ -1,4 +1,4 @@
-# bnp_na V13.17 updated folder
+# bnp_na V13.18 updated folder
 
 Top-level app folder contains only:
 
@@ -33,6 +33,13 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.18 changes
+
+1. Version is `bnp_na V13.18`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. The `Opposing phosphate X-disp` panel is opt-in through a checkbox in its group title that starts off.
+3. The panel carries a warning that the search is rarely needed and suits "ideal helix" DNA nanostructure work.
+4. `Find X-disp` and the Phenix refinement checkbox are enabled only while the title checkbox is ticked, and it is locked during a running search.
 
 ## V13.17 changes
 

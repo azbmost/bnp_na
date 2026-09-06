@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.17: Building and placing nucleic acid helices.
+"""bnp_na V13.18: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.17"
+__version__ = "V13.18"
 APP_NAME = "bnp_na"
 
 # Answer -v/--version before importing the GUI toolkit so that
@@ -284,6 +284,7 @@ class App(tk.Tk):
         self._style = ttk.Style(self)
         self._style.configure("Bold.TLabelframe.Label", font=("Helvetica", 11, "bold"))
         self._style.configure("Hint.TLabel", foreground="#666", font=("Helvetica", 9))
+        self._style.configure("Warn.TLabel", foreground="#8a5a00", font=("Helvetica", 9, "bold"))
         self._style.configure("Status.TLabel", foreground="#555", font=("Helvetica", 9))
         self._style.configure("Compact.Treeview", rowheight=18, font=("Helvetica", 9))
         self._style.configure("Compact.Treeview.Heading", font=("Helvetica", 9, "bold"))
@@ -2657,8 +2658,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         win = tk.Toplevel(self)
         self._set_optional_window_icon(win)
         win.title(f"Customize DSSR parameters — {na_type}")
-        win.geometry("960x600+180+120")
-        win.minsize(860, 530)
+        win.geometry("960x630+180+120")
+        win.minsize(860, 550)
         win.transient(self)
         win.grab_set()
 
@@ -2736,9 +2737,30 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         The search builds many helices, so it runs on a worker thread and reports
         back through a queue drained on the Tk thread.
         """
-        frame = ttk.LabelFrame(win, text="Opposing phosphate X-disp")
+        frame = ttk.LabelFrame(win)
         frame.grid(row=7, column=0, columnspan=6, sticky="ew", padx=14, pady=(12, 4))
         frame.grid_columnconfigure(0, weight=1)
+
+        # The enable switch is the group's own title, so ticking the box that
+        # names the panel is what turns the panel on.
+        enabled_var = tk.BooleanVar(value=False)
+        enable_check = ttk.Checkbutton(
+            frame,
+            text="Opposing phosphate X-disp",
+            variable=enabled_var,
+        )
+        frame.configure(labelwidget=enable_check)
+
+        ttk.Label(
+            frame,
+            text=(
+                "Rarely needed. This is only useful for building the \"ideal helix\" presumed by many "
+                "DNA nanostructure designs; ordinary helix building does not require it."
+            ),
+            wraplength=880,
+            style="Warn.TLabel",
+            justify="left",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=10, pady=(6, 2))
 
         ttk.Label(
             frame,
@@ -2750,7 +2772,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             wraplength=880,
             style="Hint.TLabel",
             justify="left",
-        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=10, pady=(6, 4))
+        ).grid(row=1, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 4))
 
         refine_var = tk.BooleanVar(
             value=bool(self.minimize_var.get() and self.regularize_phosphates_var.get())
@@ -2759,8 +2781,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             frame,
             text="Refine with phenix.geometry_minimization + phosphate regularization",
             variable=refine_var,
+            state="disabled",
         )
-        refine_check.grid(row=1, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 2))
+        refine_check.grid(row=2, column=0, columnspan=3, sticky="w", padx=10, pady=(0, 2))
 
         ttk.Label(
             frame,
@@ -2771,24 +2794,23 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             wraplength=880,
             style="Hint.TLabel",
             justify="left",
-        ).grid(row=2, column=0, columnspan=3, sticky="w", padx=30, pady=(0, 4))
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=30, pady=(0, 4))
 
         status_var = tk.StringVar(value="")
-        # Tk drops a variable as soon as Python does, and on the disabled path
+        # Tk drops a variable as soon as Python does, and on the disabled paths
         # below no closure keeps these alive. Anchor them to the dialog.
-        frame.xdisp_vars = (refine_var, status_var)  # type: ignore[attr-defined]
+        frame.xdisp_vars = (enabled_var, refine_var, status_var)  # type: ignore[attr-defined]
 
-        run_btn = ttk.Button(frame, text="Find X-disp")
+        run_btn = ttk.Button(frame, text="Find X-disp", state="disabled")
         stop_btn = ttk.Button(frame, text="Stop", state="disabled")
-        run_btn.grid(row=3, column=0, sticky="w", padx=10, pady=(2, 8))
-        stop_btn.grid(row=3, column=1, sticky="w", padx=(0, 10), pady=(2, 8))
+        run_btn.grid(row=4, column=0, sticky="w", padx=10, pady=(2, 8))
+        stop_btn.grid(row=4, column=1, sticky="w", padx=(0, 10), pady=(2, 8))
         ttk.Label(frame, textvariable=status_var, style="Hint.TLabel").grid(
-            row=3, column=2, sticky="w", padx=(4, 10), pady=(2, 8)
+            row=4, column=2, sticky="w", padx=(4, 10), pady=(2, 8)
         )
 
         if na_type != "B-DNA":
-            refine_check.configure(state="disabled")
-            run_btn.configure(state="disabled")
+            enable_check.configure(state="disabled")
             status_var.set(f"Available for B-DNA only; {na_type} is selected.")
             return
 
@@ -2811,6 +2833,16 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             run_btn.configure(state="disabled" if running else "normal")
             stop_btn.configure(state="normal" if running else "disabled")
             refine_check.configure(state="disabled" if running else "normal")
+            # Locked while a search is in flight, so enabled_var cannot change
+            # underneath the run that is already going.
+            enable_check.configure(state="disabled" if running else "normal")
+
+        def apply_enabled_state() -> None:
+            on = bool(enabled_var.get())
+            refine_check.configure(state="normal" if on else "disabled")
+            run_btn.configure(state="normal" if on else "disabled")
+            if not on:
+                status_var.set("")
 
         def finish(result: Dict[str, object]) -> None:
             self._append_log(format_result_report(result))
@@ -2852,6 +2884,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             win.after(150, poll)
 
         def start() -> None:
+            if not enabled_var.get():
+                return
             worker = state.get("worker")
             if worker is not None and worker.is_alive():  # type: ignore[union-attr]
                 return
@@ -2900,6 +2934,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             state["cancel"] = True
             status_var.set("Stopping after the current model...")
 
+        enable_check.configure(command=apply_enabled_state)
         run_btn.configure(command=start)
         stop_btn.configure(command=stop)
         win.protocol("WM_DELETE_WINDOW", lambda: (state.__setitem__("cancel", True), win.destroy()))
