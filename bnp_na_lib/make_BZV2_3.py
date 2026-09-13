@@ -367,23 +367,18 @@ class AxisLineResult:
 
 
 _ALIGN2Z_MODULE = None
-_ALIGN2Z_IMPORT_ERROR: Optional[BaseException] = None
 _DSSR_AUTO_FALLBACK_REPORTED = False
 
 
 def _get_align2z_module():
     """Import align2z lazily, so DSSR axis extraction is only pulled in when used."""
 
-    global _ALIGN2Z_MODULE, _ALIGN2Z_IMPORT_ERROR
+    global _ALIGN2Z_MODULE
     if _ALIGN2Z_MODULE is not None:
         return _ALIGN2Z_MODULE
 
-    try:
-        _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
-        return _ALIGN2Z_MODULE
-    except BaseException as exc:
-        _ALIGN2Z_IMPORT_ERROR = exc
-        raise
+    _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
+    return _ALIGN2Z_MODULE
 
 
 def _active_structure_records_for_axis(struct: Structure, extra_exclude: Optional[set] = None) -> List[object]:
