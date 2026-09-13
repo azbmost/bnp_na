@@ -44,12 +44,19 @@ Examples:
 """
 from __future__ import annotations
 
+if __package__ in (None, ""):  # run as a script: python3 bnp_na_lib/pdb_inv_rotV2.py
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    __package__ = "bnp_na_lib"
+
 import os
 import sys
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 
-from edit_pdb_atom import file2rec, rec2file
+from .edit_pdb_atom import file2rec, rec2file
 
 
 VALID_AXES = set("xyz")

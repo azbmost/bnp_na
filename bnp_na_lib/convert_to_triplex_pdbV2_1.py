@@ -33,6 +33,13 @@ Author: updated from the original script supplied by Di Liu.
 
 from __future__ import annotations
 
+if __package__ in (None, ""):  # run as a script: python3 bnp_na_lib/convert_to_triplex_pdbV2_1.py
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    __package__ = "bnp_na_lib"
+
 import argparse
 import copy
 import io
@@ -45,7 +52,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from edit_pdb_atom import file2rec, rec2file, pdb_ter_record
+from .edit_pdb_atom import file2rec, rec2file, pdb_ter_record
 
 # ---------------------------------------------------------------------------
 # Embedded templates supplied by the user.

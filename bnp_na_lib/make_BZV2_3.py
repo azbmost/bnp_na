@@ -74,6 +74,13 @@ Dependencies:
 
 from __future__ import annotations
 
+if __package__ in (None, ""):  # run as a script: python3 bnp_na_lib/make_BZV2_3.py
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    __package__ = "bnp_na_lib"
+
 import argparse
 import copy
 import importlib
@@ -88,8 +95,8 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-import core_BZ
-from edit_pdb_atom import file2rec, pdb_atom_record, pdb_ter_record, rec2file
+from . import core_BZ
+from .edit_pdb_atom import file2rec, pdb_atom_record, pdb_ter_record, rec2file
 
 
 
@@ -400,7 +407,7 @@ def _get_align2z_module():
         return _ALIGN2Z_MODULE
 
     try:
-        _ALIGN2Z_MODULE = importlib.import_module("align2z")
+        _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
         return _ALIGN2Z_MODULE
     except ModuleNotFoundError as exc:
         if exc.name != "geometry_utils":
@@ -409,7 +416,7 @@ def _get_align2z_module():
         sys.modules.pop("align2z", None)
         _install_geometry_utils_stub_for_align2z()
         try:
-            _ALIGN2Z_MODULE = importlib.import_module("align2z")
+            _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
             return _ALIGN2Z_MODULE
         except BaseException as exc2:
             _ALIGN2Z_IMPORT_ERROR = exc2

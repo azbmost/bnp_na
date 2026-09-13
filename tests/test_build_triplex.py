@@ -1,18 +1,11 @@
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-# build_triplex reaches its siblings by flat import, the way the GUI and the
-# bundled CLIs arrange things. Import it the same way: going through the
-# package instead would load build_common a second time under a different
-# name, and its PipelineError would no longer match the one raised here.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "bnp_na_lib"))
-
-from build_common import PipelineError  # noqa: E402
-from build_triplex import (  # noqa: E402
+from bnp_na_lib.build_common import PipelineError
+from bnp_na_lib.build_triplex import (
     DEFAULT_PARAMS_FILE,
     TMP_DIR_NAME,
     build_triplex_from_duplex,

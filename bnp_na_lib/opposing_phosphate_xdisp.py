@@ -20,6 +20,13 @@ For the ``A31`` reference helix at the bnp_na B-DNA defaults it reproduces
 """
 from __future__ import annotations
 
+if __package__ in (None, ""):  # run as a script: python3 bnp_na_lib/opposing_phosphate_xdisp.py
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    __package__ = "bnp_na_lib"
+
 import argparse
 import math
 import tempfile
@@ -27,10 +34,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 
-try:  # bnp_na_lib on sys.path, as the GUI and the bundled CLIs arrange it
-    from build_common import PARAM_KEYS
-except ImportError:  # imported as part of the bnp_na_lib package
-    from bnp_na_lib.build_common import PARAM_KEYS
+from .build_common import PARAM_KEYS
 
 
 TOOL_VERSION = "V13.17"
@@ -257,10 +261,8 @@ def _load_build_bdna() -> Callable[..., Dict[str, object]]:
     driver be imported, and tested with an injected ``measure``, without pulling
     in the DSSR and Phenix build stack.
     """
-    try:
-        from build_bdna import build_bdna
-    except ImportError:  # imported as part of the bnp_na_lib package
-        from bnp_na_lib.build_bdna import build_bdna
+    from .build_bdna import build_bdna
+
     return build_bdna
 
 

@@ -9,9 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from align2z import align_pdb_to_Z, format_alignment_report
-from build_common import PipelineError, command_to_text, run_dssr_fiber_z, sanitize_basename
-from pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
+from .align2z import align_pdb_to_Z, format_alignment_report
+from .build_common import PipelineError, command_to_text, run_dssr_fiber_z, sanitize_basename
+from .pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
 
 
 BACKBONE = "Z-DNA"

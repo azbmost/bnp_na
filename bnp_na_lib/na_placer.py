@@ -6,8 +6,8 @@ from typing import Dict
 
 import numpy as np
 
-from edit_pdb_atom import file2rec, rec2file
-from geometry_utils import rotation_matrix_y, rotation_matrix_z
+from .edit_pdb_atom import file2rec, rec2file
+from .geometry_utils import rotation_matrix_y, rotation_matrix_z
 
 
 class PlacerError(Exception):

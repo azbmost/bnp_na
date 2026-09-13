@@ -8,8 +8,8 @@ import shlex
 from pathlib import Path
 from typing import Dict, Sequence, Union
 
-from build_common import PipelineError
-from make_BZV2_3 import (
+from .build_common import PipelineError
+from .make_BZV2_3 import (
     DEFAULT_OUTPUT_NAME,
     effective_axis_source,
     normalize_axis_mode,

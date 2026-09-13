@@ -11,8 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Optional, Union
 
-from align2z import align_pdb_to_Z, format_alignment_report
-from build_common import (
+from .align2z import align_pdb_to_Z, format_alignment_report
+from .build_common import (
     DEFAULT_PARAMS,
     PARAM_KEYS,
     PipelineError,
@@ -26,8 +26,8 @@ from build_common import (
     run_phenix_minimization,
     write_helical_table,
 )
-from pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
-from regularize_phosphates import default_regularized_output_path, regularize_phosphates
+from .pdb_name_standard import normalize_pdb_naming as normalize_nucleotide_pdb_naming
+from .regularize_phosphates import default_regularized_output_path, regularize_phosphates
 
 
 BACKBONE = "A-RNA"

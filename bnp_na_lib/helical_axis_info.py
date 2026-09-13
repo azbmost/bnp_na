@@ -2,13 +2,20 @@
 """Get DSSR helical-axis information for selected PDB chains."""
 from __future__ import annotations
 
+if __package__ in (None, ""):  # run as a script: python3 bnp_na_lib/helical_axis_info.py
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+    __package__ = "bnp_na_lib"
+
 import argparse
 import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Tuple, Union
 
-from align2z import command_to_text, parse_first_axis_points, run_dssr_more_axis
+from .align2z import command_to_text, parse_first_axis_points, run_dssr_more_axis
 
 
 Vector3 = Tuple[float, float, float]

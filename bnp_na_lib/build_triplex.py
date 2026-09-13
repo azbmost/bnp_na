@@ -6,14 +6,14 @@ import shutil
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
 
-from build_common import (
+from .build_common import (
     PipelineError,
     command_to_text,
     expected_phenix_minimized_path,
     run_phenix_minimization,
     stage_params_to_output_dir,
 )
-from convert_to_triplex_pdbV2_1 import (
+from .convert_to_triplex_pdbV2_1 import (
     convert_duplex_to_triplex,
     default_output_path,
     format_chain_sequence_info,
@@ -21,7 +21,7 @@ from convert_to_triplex_pdbV2_1 import (
     format_selection_preview,
     normalize_mode,
 )
-from regularize_phosphates import default_regularized_output_path, regularize_phosphates
+from .regularize_phosphates import default_regularized_output_path, regularize_phosphates
 
 
 #: Intermediates from the minimization/regularization steps are kept beside the

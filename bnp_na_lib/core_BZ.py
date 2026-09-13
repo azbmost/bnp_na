@@ -236,7 +236,7 @@ def core_records():
 
     The returned list contains only ATOM/HETATM/TER records (no ANISOU).
     """
-    from edit_pdb_atom import pdb_atom_record, pdb_ter_record
+    from .edit_pdb_atom import pdb_atom_record, pdb_ter_record
     recs = []
     for ln in PDB_LINES:
         if ln.startswith(("ATOM", "HETATM")):

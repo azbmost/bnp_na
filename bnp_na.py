@@ -72,13 +72,12 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk  # noqa: E402
 
 APP_DIR = Path(__file__).resolve().parent
 LIB_DIR = APP_DIR / "bnp_na_lib"
-sys.path.insert(0, str(LIB_DIR))
 
-from build_adna import build_adna  # noqa: E402
-from build_arna import build_arna  # noqa: E402
-from build_bz import build_bz_structure  # noqa: E402
-from build_bdna import build_bdna  # noqa: E402
-from build_common import (  # noqa: E402
+from bnp_na_lib.build_adna import build_adna  # noqa: E402
+from bnp_na_lib.build_arna import build_arna  # noqa: E402
+from bnp_na_lib.build_bz import build_bz_structure  # noqa: E402
+from bnp_na_lib.build_bdna import build_bdna  # noqa: E402
+from bnp_na_lib.build_common import (  # noqa: E402
     DEFAULT_PARAMS,
     PARAM_KEYS,
     PipelineError,
@@ -87,15 +86,15 @@ from build_common import (  # noqa: E402
     sanitize_basename,
     sequence_alphabet,
 )
-from build_triplex import (  # noqa: E402
+from bnp_na_lib.build_triplex import (  # noqa: E402
     TMP_DIR_NAME as TRIPLEX_TMP_DIR_NAME,
     build_triplex_from_duplex,
     default_triplex_output_path,
     describe_triplex_input,
 )
-from build_zdna import build_zdna  # noqa: E402
-from align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
-from combine_pdb import (  # noqa: E402
+from bnp_na_lib.build_zdna import build_zdna  # noqa: E402
+from bnp_na_lib.align2z import align_pdb_to_Z, format_alignment_report  # noqa: E402
+from bnp_na_lib.combine_pdb import (  # noqa: E402
     combine_pdb_files,
     default_combine_pdb_output_path,
     format_chain_id as format_combine_chain_id,
@@ -103,27 +102,27 @@ from combine_pdb import (  # noqa: E402
     list_pdb_chains,
     parse_chain_selection as parse_combine_chain_selection,
 )
-from add_phosphates import (  # noqa: E402
+from bnp_na_lib.add_phosphates import (  # noqa: E402
     add_terminal_phosphates,
     analyze_phosphate_termini,
     default_add_phosphate_output_path,
     format_phosphate_report,
     parse_chain_selection,
 )
-from regularize_phosphates import (  # noqa: E402
+from bnp_na_lib.regularize_phosphates import (  # noqa: E402
     default_regularized_output_path,
     regularize_phosphates,
 )
-from opposing_phosphate_xdisp import (  # noqa: E402
+from bnp_na_lib.opposing_phosphate_xdisp import (  # noqa: E402
     OpposingPhosphateCancelled,
     find_opposing_phosphate_xdisp,
     format_result_report,
 )
-from angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
-from helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
-from pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
-from xyz_bild import write_xyz_bild  # noqa: E402
-from na_placer import PlacerError, place_after_Z  # noqa: E402
+from bnp_na_lib.angle_helical_axisV2_2 import launch_gui as launch_axis_angle_gui  # noqa: E402
+from bnp_na_lib.helical_axis_info import format_axis_info_report, get_helical_axis_info, parse_chain_ids  # noqa: E402
+from bnp_na_lib.pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_operation  # noqa: E402
+from bnp_na_lib.xyz_bild import write_xyz_bild  # noqa: E402
+from bnp_na_lib.na_placer import PlacerError, place_after_Z  # noqa: E402
 
 
 PARAM_BASE_LABELS = {
