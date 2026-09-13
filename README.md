@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.18`.
+The current app version is `V13.19`.
 
 ## What It Does
 
@@ -62,6 +62,20 @@ Print the version without opening the GUI:
 
 ```bash
 python3 bnp_na.py --version
+```
+
+Print the command-line options without opening the GUI:
+
+```bash
+python3 bnp_na.py --help
+```
+
+`-h`/`--help` and `-v`/`--version` are answered before Tkinter is imported, so both work on a machine with no Tk installed. The GUI itself takes no arguments; anything else is reported as a usage error and exits with status 2 instead of opening a window. Run `python3 bnp_na.py` with no options to start the GUI.
+
+Each tool in `bnp_na_lib/` has its own `--help`, for example:
+
+```bash
+python3 bnp_na_lib/combine_pdb.py --help
 ```
 
 See `CHANGELOG.md` for the version-by-version change log.
@@ -364,19 +378,43 @@ Strand II can be left blank. In that case, the converter searches other chains f
 duplex.pdb -> duplex_2TH.pdb
 ```
 
-`Strand I purine chain` is the chain ID for the purine strand in the duplex.
+`Strand I purine chain ID` is the chain ID for the purine strand in the duplex.
 
 `Strand I residue range` is the residue-number range on strand I to convert.
 
 `Triplex mode` chooses the embedded base-triple template.
 
-`Strand II chain` is optional. Use it when auto-detection chooses the wrong partner chain or you want to make the mapping explicit.
+`Strand II chain ID` is optional. Use it when auto-detection chooses the wrong partner chain or you want to make the mapping explicit.
 
-`Strand III chain` is optional. Use it when you need a specific chain ID for the added strand.
+`Strand III chain ID` is optional. Use it when you need a specific chain ID for the added strand.
 
 `Strand III first resSeq` controls the residue number assigned to the first residue of the added third strand.
 
 `Refresh strand info` reads the input PDB, lists detected chains and sequences, and previews whether the selected strand-I range matches the chosen mode.
+
+#### Post-Processing
+
+`bnp_na` V13.19 adds a `Post-processing` group with `Run phenix.geometry_minimization` and `Regularize phosphates`, both **on by default**, plus a params-file field for minimization. These are the same two steps the main `Generate` pipeline applies to B-DNA, A-DNA, and A-RNA, now available for the converted triplex. The params field is disabled while minimization is off.
+
+With either option on, the `Output PDB` path receives the **final** processed model. The raw conversion and every intermediate go into a `triplex_gen_tmp` folder beside it, including whatever Phenix writes alongside its output and a copy of the staged params file:
+
+```text
+<output folder>/
+    my_duplex_2TH.pdb                                      final model
+    triplex_gen_tmp/
+        min_P_C5.params                                    staged params copy
+        my_duplex_2TH_triplex_raw.pdb                      conversion only
+        my_duplex_2TH_triplex_raw_minimized.pdb            after phenix
+        my_duplex_2TH_triplex_raw_minimized.cif
+        my_duplex_2TH_triplex_raw_minimized.geo
+        my_duplex_2TH_triplex_raw_minimized_regularized_phosphates.pdb
+```
+
+With both options off, the converter writes the triplex straight to `Output PDB` and no `triplex_gen_tmp` folder is created, which is what earlier versions did.
+
+`build_triplex_from_duplex` applies the same defaults, so a direct API call minimizes and regularizes unless told otherwise, falling back to the bundled `bnp_na_lib/min_P_C5.params` when no params file is given.
+
+The final file still receives the `REMARK BNP_NA...` provenance header, so it differs from the last intermediate only by those records.
 
 The final triplex PDB gets `REMARK BNP_NA...` provenance records, including the `bnp_na` version and AZBMOST repository link. Since the triplex converter does not itself make an L-form model, it writes `REMARK BNP_NA_L_FORM NO`.
 
@@ -646,7 +684,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.18 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.19 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -1153,7 +1191,7 @@ If the error mentions Z-DNA terminal phase, turn on `Auto-trim terminal Z-DNA bp
 
 For `antiparallel` mode, the selected strand-I range must be all `G`. For `parallel` mode, the selected strand-I range must be all `A`. Use `Refresh strand info` to preview the selected sequence before running conversion.
 
-If strand-II auto-detection fails, specify the `Strand II chain` explicitly. The selected partner segment must be a contiguous `C` segment for antiparallel `G·G-C` or a contiguous `T` segment for parallel `T·A-T`.
+If strand-II auto-detection fails, specify the `Strand II chain ID` explicitly. The selected partner segment must be a contiguous `C` segment for antiparallel `G·G-C` or a contiguous `T` segment for parallel `T·A-T`.
 
 ### The Final PDB Is Not Where Expected
 

@@ -2,6 +2,24 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.19
+
+- Added `-h`/`--help` to `bnp_na.py`, which previously ignored the flag and opened the GUI instead of printing anything.
+- The help text covers the available options, what the GUI does, and how to reach the standalone `bnp_na_lib/` tools, which each carry their own `--help`.
+- `--help` and `--version` are both answered before Tkinter is imported, so they work on a machine with no Tk installed.
+- The GUI takes no arguments, so an unrecognized option or stray positional argument now reports a usage error on stderr and exits with status 2 rather than silently launching the GUI.
+- Running `python3 bnp_na.py` with no options still starts the GUI as before.
+- Added regression coverage for both spellings of each flag, the no-Tkinter path, help/version precedence, and the usage-error exit status.
+- Renamed the triplex converter's `Strand I purine chain`, `Strand II chain`, and `Strand III chain` labels to `... chain ID`, since each field takes a chain ID rather than a chain, matching `Chain IDs` in the other tool dialogs.
+- Added `Run phenix.geometry_minimization` and `Regularize phosphates` checkboxes to the triplex converter, both on by default, with a params-file field that is disabled while minimization is off.
+- These are the same post-processing steps the main `Generate` pipeline already applied to B-DNA, A-DNA, and A-RNA; the triplex converter previously had neither.
+- With either option on, the chosen `Output PDB` path receives the final processed model, and the raw conversion plus every intermediate goes into a `triplex_gen_tmp` folder beside it.
+- With both off, the converter writes straight to the chosen path and creates no folder, matching earlier behavior.
+- `build_triplex_from_duplex` gained `run_phenix`, `params_file`, and `run_regularize_phosphates`, with minimization and regularization on by default so the API matches the dialog.
+- `params_file` falls back to the bundled `bnp_na_lib/min_P_C5.params` when minimization runs without one; a blank or missing params file is still reported.
+- Pass `run_phenix=False, run_regularize_phosphates=False` for the raw conversion straight to the output path.
+- Added regression coverage for output routing, the tmp-folder layout, option defaults, and the params-file requirement.
+
 ## V13.18
 
 - The `Opposing phosphate X-disp` panel in `Customize DSSR parameters` is now opt-in and starts switched off.

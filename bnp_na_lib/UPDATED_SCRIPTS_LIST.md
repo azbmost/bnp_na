@@ -1,4 +1,4 @@
-# bnp_na V13.18 updated folder
+# bnp_na V13.19 updated folder
 
 Top-level app folder contains only:
 
@@ -14,7 +14,7 @@ Top-level app folder contains only:
 - `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=RNA --par-type=heli`; optional phenix.geometry_minimization.
 - `build_zdna.py` — Z-DNA builder using DSSR fiber; no phenix.geometry_minimization option.
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
-- `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI.
+- `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI, with optional phenix.geometry_minimization and phosphate regularization of the converted triplex.
 - `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
 - `regularize_phosphates.py` — C1'-derived helical-symmetry regularizer for P/OP1/OP2/O5'/C5'/O3', including terminal propagation, a reusable API, and a direct CLI.
 - `opposing_phosphate_xdisp.py` — searches for the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for the raw DSSR rebuild or the Phenix-minimized and phosphate-regularized pipeline, with a reusable API and a direct CLI.
@@ -33,6 +33,15 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.19 changes
+
+1. Version is `bnp_na V13.19`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. `python bnp_na.py -h` or `python bnp_na.py --help` prints the command-line options and exits.
+3. Both flags are answered before Tkinter is imported, so they work without Tk installed.
+4. Unrecognized arguments report a usage error and exit with status 2 instead of opening the GUI.
+5. The triplex converter gained `Run phenix.geometry_minimization` and `Regularize phosphates` checkboxes, both on by default.
+6. Triplex post-processing writes the final model to the chosen output path and keeps intermediates in a `triplex_gen_tmp` folder beside it.
 
 ## V13.18 changes
 

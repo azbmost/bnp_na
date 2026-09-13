@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.18: Building and placing nucleic acid helices.
+"""bnp_na V13.19: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,14 +15,57 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.18"
+__version__ = "V13.19"
 APP_NAME = "bnp_na"
 
-# Answer -v/--version before importing the GUI toolkit so that
-# `python3 bnp_na.py --version` works even on systems without tkinter.
-if __name__ == "__main__" and any(arg in ("-v", "--version") for arg in sys.argv[1:]):
-    print(f"{APP_NAME} {__version__}")
-    sys.exit(0)
+HELP_TEXT = f"""usage: {APP_NAME}.py [-h] [-v]
+
+{APP_NAME} {__version__} - build and place nucleic acid helices.
+
+Runs as a Tkinter GUI. Start it with no options:
+
+  python3 {APP_NAME}.py
+
+options:
+  -h, --help     show this message and exit
+  -v, --version  print the version and exit
+
+The GUI builds B-DNA, A-DNA, A-RNA, and Z-DNA helices, and hosts the B-Z
+builder, the triplex converter, and the tools under `Other tools`.
+
+Many of those tools also run standalone from the helper folder, each with
+its own --help, for example:
+
+  python3 bnp_na_lib/combine_pdb.py --help
+  python3 bnp_na_lib/regularize_phosphates.py --help
+
+x3dna-dssr must be on PATH for model generation; phenix.geometry_minimization
+is optional. See README.md for the full guide."""
+
+
+def _answer_cli_request(args: List[str]) -> None:
+    """Answer -h/--help and -v/--version before the GUI toolkit is imported.
+
+    Staying ahead of the tkinter import keeps both working on systems with no
+    Tk installed, and stops --help from silently opening a window instead of
+    printing anything. The GUI itself takes no arguments, so anything else is
+    a usage error rather than a reason to launch.
+    """
+    if not args:
+        return
+    if any(arg in ("-h", "--help") for arg in args):
+        print(HELP_TEXT)
+        sys.exit(0)
+    if any(arg in ("-v", "--version") for arg in args):
+        print(f"{APP_NAME} {__version__}")
+        sys.exit(0)
+    print(f"{APP_NAME}: unrecognized argument: {args[0]}", file=sys.stderr)
+    print(f"Try 'python3 {APP_NAME}.py --help' for usage.", file=sys.stderr)
+    sys.exit(2)
+
+
+if __name__ == "__main__":
+    _answer_cli_request(sys.argv[1:])
 
 import tkinter as tk  # noqa: E402
 from tkinter import filedialog, messagebox, scrolledtext, ttk  # noqa: E402
@@ -45,6 +88,7 @@ from build_common import (  # noqa: E402
     sequence_alphabet,
 )
 from build_triplex import (  # noqa: E402
+    TMP_DIR_NAME as TRIPLEX_TMP_DIR_NAME,
     build_triplex_from_duplex,
     default_triplex_output_path,
     describe_triplex_input,
@@ -2302,11 +2346,11 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         win = tk.Toplevel(self)
         self._set_optional_window_icon(win)
         win.title("Triplex converter")
-        win.geometry("940x720+190+100")
-        win.minsize(820, 620)
+        win.geometry("940x820+190+100")
+        win.minsize(820, 700)
         win.transient(self)
         win.grid_columnconfigure(1, weight=1)
-        win.grid_rowconfigure(10, weight=1)
+        win.grid_rowconfigure(11, weight=1)
 
         try:
             out_dir = Path(self.output_dir_var.get()).expanduser()
@@ -2421,7 +2465,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         ttk.Entry(win, textvariable=out_var).grid(row=1, column=1, sticky="we", **pad)
         ttk.Button(win, text="Browse", command=browse_out).grid(row=1, column=2, sticky="w", **pad)
 
-        ttk.Label(win, text="Strand I purine chain:").grid(row=2, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Strand I purine chain ID:").grid(row=2, column=0, sticky="e", **pad)
         strand_i_entry = ttk.Entry(win, textvariable=strand_i_var, width=10)
         strand_i_entry.grid(row=2, column=1, sticky="w", **pad)
         strand_i_entry.bind("<Return>", lambda *_args: refresh_info())
@@ -2451,10 +2495,10 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             wraplength=300,
         ).grid(row=4, column=2, sticky="w", padx=(4, 10), pady=4)
 
-        ttk.Label(win, text="Strand II chain (optional):").grid(row=5, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Strand II chain ID (optional):").grid(row=5, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=strand_ii_var, width=10).grid(row=5, column=1, sticky="w", **pad)
 
-        ttk.Label(win, text="Strand III chain (optional):").grid(row=6, column=0, sticky="e", **pad)
+        ttk.Label(win, text="Strand III chain ID (optional):").grid(row=6, column=0, sticky="e", **pad)
         ttk.Entry(win, textvariable=strand_iii_var, width=10).grid(row=6, column=1, sticky="w", **pad)
 
         ttk.Label(win, text="Strand III first resSeq:").grid(row=7, column=0, sticky="e", **pad)
@@ -2471,22 +2515,94 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             wraplength=850,
         ).grid(row=8, column=0, columnspan=3, sticky="w", padx=10, pady=(2, 6))
 
+        min_frame = ttk.LabelFrame(win, text="Post-processing", style="Bold.TLabelframe")
+        min_frame.grid(row=9, column=0, columnspan=3, sticky="we", padx=10, pady=(2, 6))
+        min_frame.grid_columnconfigure(2, weight=1)
+
+        triplex_minimize_var = tk.BooleanVar(value=True)
+        triplex_regularize_var = tk.BooleanVar(value=True)
+        triplex_params_var = tk.StringVar(value=self.params_var.get().strip() or _path_text(DEFAULT_PARAMS_FILE))
+
+        min_check = ttk.Checkbutton(
+            min_frame,
+            text="Run phenix.geometry_minimization",
+            variable=triplex_minimize_var,
+        )
+        min_check.grid(row=0, column=0, sticky="w", padx=8, pady=4)
+        ttk.Label(min_frame, text="Params file (.eff / .params):").grid(
+            row=0, column=1, sticky="e", padx=8, pady=4
+        )
+        params_entry = ttk.Entry(min_frame, textvariable=triplex_params_var)
+        params_entry.grid(row=0, column=2, sticky="we", padx=8, pady=4)
+
+        def browse_triplex_params() -> None:
+            path = filedialog.askopenfilename(
+                parent=win,
+                title="Select params file",
+                filetypes=[("Params files", "*.eff *.params"), ("All files", "*.*")],
+            )
+            if path:
+                triplex_params_var.set(path)
+
+        ttk.Button(min_frame, text="Browse", command=browse_triplex_params).grid(
+            row=0, column=3, sticky="w", padx=8, pady=4
+        )
+
+        ttk.Checkbutton(
+            min_frame,
+            text="Regularize phosphates",
+            variable=triplex_regularize_var,
+        ).grid(row=1, column=0, sticky="w", padx=8, pady=(0, 4))
+
+        def on_triplex_minimize_toggled() -> None:
+            state = "normal" if triplex_minimize_var.get() else "disabled"
+            params_entry.configure(state=state)
+
+        min_check.configure(command=on_triplex_minimize_toggled)
+
+        ttk.Label(
+            min_frame,
+            text=(
+                "Applied to the converted triplex. The output PDB above receives the final model; "
+                f"the raw conversion and every intermediate go into a `{TRIPLEX_TMP_DIR_NAME}` "
+                "folder beside it."
+            ),
+            style="Hint.TLabel",
+            wraplength=850,
+            justify="left",
+        ).grid(row=2, column=0, columnspan=4, sticky="w", padx=8, pady=(0, 6))
+
         buttons = ttk.Frame(win)
-        buttons.grid(row=9, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 4))
+        buttons.grid(row=10, column=0, columnspan=3, sticky="e", padx=10, pady=(2, 4))
         ttk.Button(buttons, text="Refresh strand info", command=refresh_info).pack(side="left", padx=6)
         ttk.Button(buttons, text="Close", command=win.destroy).pack(side="left", padx=6)
         run_btn = ttk.Button(buttons, text="Convert to triplex")
         run_btn.pack(side="left", padx=6)
 
-        triplex_log.grid(row=10, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
+        triplex_log.grid(row=11, column=0, columnspan=3, sticky="nsew", padx=10, pady=(0, 10))
 
         def run_triplex() -> None:
             duplex = duplex_var.get().strip()
             _update_default_output(force=False)
             out_text = out_var.get().strip()
+            run_phenix = bool(triplex_minimize_var.get())
+            run_regularize = bool(triplex_regularize_var.get())
             try:
                 residue_range = _current_range()
                 strand_iii_start = _parse_int_expression(strand_iii_start_var.get(), "Strand III first resSeq")
+                params_path = None
+                if run_phenix:
+                    params_text = triplex_params_var.get().strip()
+                    if not params_text:
+                        raise ValueError(
+                            "Please specify a params file for phenix.geometry_minimization."
+                        )
+                    candidate = Path(params_text).expanduser()
+                    if not candidate.is_absolute():
+                        candidate = candidate.resolve()
+                    if not candidate.exists():
+                        raise ValueError(f"Params file not found: {candidate}")
+                    params_path = str(candidate)
             except Exception as exc:
                 messagebox.showerror("Triplex converter", str(exc), parent=win)
                 return
@@ -2499,6 +2615,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 f"Mode: {mode_var.get()}\n"
                 f"Strand I: {strand_i_var.get().strip()}\n"
                 f"Residue range: {residue_range[0]}:{residue_range[1]}\n"
+                f"phenix.geometry_minimization: {run_phenix}\n"
+                f"Regularize phosphates: {run_regularize}\n"
             )
             _set_dialog_log(start_log)
             self._set_log(start_log)
@@ -2513,6 +2631,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     strand_ii_chain=(strand_ii_var.get().strip() or None),
                     strand_iii_chain=(strand_iii_var.get().strip() or None),
                     strand_iii_start_resseq=strand_iii_start,
+                    run_phenix=run_phenix,
+                    params_file=params_path,
+                    run_regularize_phosphates=run_regularize,
                 )
                 pdb_out = Path(str(result["pdb_out"]))
                 remarks_log = _prepend_final_pdb_remarks(
