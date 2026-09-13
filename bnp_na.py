@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.19: Building and placing nucleic acid helices.
+"""bnp_na V13.20: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.19"
+__version__ = "V13.20"
 APP_NAME = "bnp_na"
 
 HELP_TEXT = f"""usage: {APP_NAME}.py [-h] [-v]

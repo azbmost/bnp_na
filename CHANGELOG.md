@@ -2,6 +2,16 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.20
+
+- `bnp_na_lib` modules now reach their siblings through the package, so the library can be imported from outside its own folder. A project that puts the repository root on `sys.path` can now do `from bnp_na_lib.build_bdna import build_bdna`.
+- Previously every helper imported its siblings by bare name, which only resolved while `bnp_na_lib/` was itself on `sys.path`. Reaching the same code as `bnp_na_lib.build_bdna` failed with `ModuleNotFoundError: No module named 'align2z'`, so sibling projects could not use it.
+- The standalone tools in `bnp_na_lib/` still run exactly as documented, for example `python3 bnp_na_lib/combine_pdb.py --help`. The ones that are runnable as scripts establish their own package context when started that way.
+- `bnp_na.py` no longer inserts `bnp_na_lib/` on `sys.path` and imports each helper as `bnp_na_lib.<module>`.
+- That insert previously let one file be loaded twice under two names, once flat and once package-qualified, giving two copies of every class it defines. An `isinstance` check across that boundary silently failed, so a filter could keep none of its input without raising anything.
+- `make_BZV2_3.py` imported `align2z` lazily by bare name and carried an in-memory `geometry_utils` stub for the case where that import failed. The lazy import now goes through the package, and the stub, which a relative import would bypass in any case, has been removed.
+- No change to the GUI, to any tool's options or output, or to the models produced.
+
 ## V13.19
 
 - Added `-h`/`--help` to `bnp_na.py`, which previously ignored the flag and opened the GUI instead of printing anything.

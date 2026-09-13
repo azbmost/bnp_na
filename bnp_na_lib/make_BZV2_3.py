@@ -88,7 +88,6 @@ import math
 import shlex
 import sys
 import tempfile
-import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -372,35 +371,8 @@ _ALIGN2Z_IMPORT_ERROR: Optional[BaseException] = None
 _DSSR_AUTO_FALLBACK_REPORTED = False
 
 
-def _install_geometry_utils_stub_for_align2z() -> None:
-    """Install a tiny in-memory geometry_utils fallback so align2z.py can import.
-
-    Some distributions of align2z.py live inside a larger package that provides
-    geometry_utils.py. We do not modify align2z.py; this only supplies the two names
-    it imports if that package module is absent in the current folder.
-    """
-
-    if "geometry_utils" in sys.modules:
-        return
-
-    mod = types.ModuleType("geometry_utils")
-
-    class GeometryError(Exception):
-        pass
-
-    def rotation_matrix_from_to(v_from, v_to):
-        try:
-            return rotation_matrix_from_vectors(np.asarray(v_from, dtype=float), np.asarray(v_to, dtype=float))
-        except Exception as exc:
-            raise GeometryError(str(exc)) from exc
-
-    mod.GeometryError = GeometryError
-    mod.rotation_matrix_from_to = rotation_matrix_from_to
-    sys.modules["geometry_utils"] = mod
-
-
 def _get_align2z_module():
-    """Import align2z.py lazily without modifying that file."""
+    """Import align2z lazily, so DSSR axis extraction is only pulled in when used."""
 
     global _ALIGN2Z_MODULE, _ALIGN2Z_IMPORT_ERROR
     if _ALIGN2Z_MODULE is not None:
@@ -409,18 +381,6 @@ def _get_align2z_module():
     try:
         _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
         return _ALIGN2Z_MODULE
-    except ModuleNotFoundError as exc:
-        if exc.name != "geometry_utils":
-            _ALIGN2Z_IMPORT_ERROR = exc
-            raise
-        sys.modules.pop("align2z", None)
-        _install_geometry_utils_stub_for_align2z()
-        try:
-            _ALIGN2Z_MODULE = importlib.import_module(".align2z", __package__)
-            return _ALIGN2Z_MODULE
-        except BaseException as exc2:
-            _ALIGN2Z_IMPORT_ERROR = exc2
-            raise
     except BaseException as exc:
         _ALIGN2Z_IMPORT_ERROR = exc
         raise

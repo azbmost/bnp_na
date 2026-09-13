@@ -1,4 +1,4 @@
-# bnp_na V13.19 updated folder
+# bnp_na V13.20 updated folder
 
 Top-level app folder contains only:
 
@@ -33,6 +33,14 @@ Top-level app folder contains only:
 - `edit_pdb_atom.py` — PDB parser/writer helper.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.20 changes
+
+1. Version is `bnp_na V13.20`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. Helper modules import their siblings through the package, so `bnp_na_lib` can be imported from outside its own folder.
+3. The standalone tools still run as documented, for example `python3 bnp_na_lib/combine_pdb.py --help`.
+4. `bnp_na.py` no longer inserts `bnp_na_lib/` on `sys.path`, so a helper file is no longer loaded twice under two names.
+5. `make_BZV2_3.py` imports `align2z` through the package and no longer installs a `geometry_utils` stub.
 
 ## V13.19 changes
 
