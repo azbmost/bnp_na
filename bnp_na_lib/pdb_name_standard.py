@@ -12,7 +12,7 @@ v3.2 history:
   - Previous script name: pdb_make_dna_v3_2.py.
   - Current module name: pdb_name_standard.py.
   - Adds public API function normalize_pdb_naming(...) so other scripts can do:
-        from pdb_name_standard import normalize_pdb_naming
+        from bnp_na_lib.pdb_name_standard import normalize_pdb_naming
   - CLI main() now uses the same public API function.
   - Preserves v3.1 behavior:
       * Canonicalize standard 3-letter nucleotide residue names.
@@ -27,7 +27,7 @@ Usage as command line:
     python pdb_name_standard.py input.pdb [--deleteH]
 
 Usage as module:
-    from pdb_name_standard import normalize_pdb_naming
+    from bnp_na_lib.pdb_name_standard import normalize_pdb_naming
 
     out_pdb = normalize_pdb_naming("input.pdb")
     out_pdb = normalize_pdb_naming("input.pdb", "output.pdb", deleteH=True)
