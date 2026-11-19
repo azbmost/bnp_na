@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.21: Building and placing nucleic acid helices.
+"""bnp_na V13.22: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.21"
+__version__ = "V13.22"
 APP_NAME = "bnp_na"
 
 HELP_TEXT = f"""usage: {APP_NAME}.py [-h] [-v]
@@ -30,14 +30,17 @@ options:
   -h, --help     show this message and exit
   -v, --version  print the version and exit
 
-The GUI builds B-DNA, A-DNA, A-RNA, and Z-DNA helices, and hosts the B-Z
-builder, the triplex converter, and the tools under `Other tools`.
+The GUI builds B-DNA, A-DNA, A-RNA, Z-DNA, and P-DNA helices, and hosts the
+B-Z builder, the B-P builder, the triplex converter, and the tools under
+`Other tools`.
 
 Many of those tools also run standalone from the helper folder, each with
 its own --help, for example:
 
   python3 bnp_na_lib/combine_pdb.py --help
   python3 bnp_na_lib/regularize_phosphates.py --help
+  python3 bnp_na_lib/build_pdna.py --help
+  python3 bnp_na_lib/make_BP.py --help
 
 x3dna-dssr must be on PATH for model generation; phenix.geometry_minimization
 is optional. See README.md for the full guide."""
@@ -75,8 +78,11 @@ LIB_DIR = APP_DIR / "bnp_na_lib"
 
 from bnp_na_lib.build_adna import build_adna  # noqa: E402
 from bnp_na_lib.build_arna import build_arna  # noqa: E402
+from bnp_na_lib.build_bp import build_bp_structure  # noqa: E402
 from bnp_na_lib.build_bz import build_bz_structure  # noqa: E402
 from bnp_na_lib.build_bdna import build_bdna  # noqa: E402
+from bnp_na_lib.build_pdna import build_pdna, resolve_pdna_sequences  # noqa: E402
+from bnp_na_lib import core_PDNA  # noqa: E402
 from bnp_na_lib.build_common import (  # noqa: E402
     DEFAULT_PARAMS,
     PARAM_KEYS,
@@ -124,6 +130,7 @@ from bnp_na_lib.pdb_inv_rotV2 import InvRotError, apply_inv_rot_to_pdb, parse_op
 from bnp_na_lib.xyz_bild import write_xyz_bild  # noqa: E402
 from bnp_na_lib.na_placer import PlacerError, place_after_Z  # noqa: E402
 from bnp_na_lib import azbmost_ui as ui  # noqa: E402
+from bnp_na_lib import bnp_na_icons  # noqa: E402,F401  (registers the B-P builder glyph)
 
 
 PARAM_BASE_LABELS = {
@@ -161,8 +168,22 @@ PARAM_LABELS = {
 DEFAULT_PARAMS_FILE = LIB_DIR / "min_P_C5.params"
 DEFAULT_OUTPUT_DIR = APP_DIR / "output"
 DEFAULT_ICON_FILE = APP_DIR / "assets" / "bnp_na_icon.png"
+NA_TYPES = ("B-DNA", "A-DNA", "A-RNA", "Z-DNA", "P-DNA")
 NA_TYPES_WITH_TABLE = ("B-DNA", "A-DNA", "A-RNA")
-DEFAULT_MINIMIZE_BY_TYPE = {"B-DNA": True, "A-DNA": False, "A-RNA": False}
+DEFAULT_MINIMIZE_BY_TYPE = {"B-DNA": True, "A-DNA": False, "A-RNA": False, "P-DNA": False}
+# Shown read-only for P-DNA: the 1PFI template fixes them (core_PDNA.py).
+PDNA_PARAM_COLUMNS = (
+    ("h-Rise (Å/nt)", core_PDNA.RISE),
+    ("h-Twist (°/nt)", core_PDNA.TWIST_DEG),
+    ("nt / turn", core_PDNA.NT_PER_TURN),
+    ("Pitch (Å)", core_PDNA.PITCH),
+    ("P radius (Å)", core_PDNA.P_RADIUS),
+    ("C1' radius (Å)", core_PDNA.C1_RADIUS),
+)
+PDNA_PARAM_NOTE = (
+    "P-DNA (Pf1 phage DNA, PDB 1PFI) is built from the template's backbone: phosphates at the center, "
+    "bases pointing outward, no base pairs. Its helical parameters are fixed and cannot be customized."
+)
 INV_ROT_OPERATIONS = ("oyz", "oxz", "oxy", "i", "ix", "iy", "iz", "ixy", "ixz", "iyz", "ixyz")
 
 _ARITHMETIC_BIN_OPS = {
@@ -390,14 +411,11 @@ class App(tk.Tk):
             row=0, column=0, sticky="w", padx=label_pad, **field
         )
         self.na_type_var = tk.StringVar(value="B-DNA")
-        self.type_selector = ui.Segmented(
-            helix, self.na_type_var, ["B-DNA", "A-DNA", "A-RNA", "Z-DNA"], command=self.on_type_changed
-        )
+        self.type_selector = ui.Segmented(helix, self.na_type_var, list(NA_TYPES), command=self.on_type_changed)
         self.type_selector.grid(row=0, column=1, columnspan=2, sticky="w", **field)
 
-        ttk.Label(helix, text="Sequence (5'->3'):", style="Field.TLabel").grid(
-            row=1, column=0, sticky="w", padx=label_pad, **field
-        )
+        self.seq_label = ttk.Label(helix, text="Sequence (5'->3'):", style="Field.TLabel")
+        self.seq_label.grid(row=1, column=0, sticky="w", padx=label_pad, **field)
         self.seq_var = tk.StringVar(value="")
         self.seq_entry = ttk.Entry(helix, textvariable=self.seq_var)
         self.seq_entry.grid(row=1, column=1, sticky="we", **field)
@@ -405,6 +423,27 @@ class App(tk.Tk):
         ttk.Label(helix, textvariable=self.length_var, style="Hint.TLabel").grid(
             row=1, column=2, sticky="w", padx=(12, 0), **field
         )
+
+        # P-DNA only: strand II has its own sequence, as P-DNA forms no base pairs.
+        self.seq2_label = ttk.Label(helix, text="Strand II (5'->3', optional):", style="Field.TLabel")
+        self.seq2_var = tk.StringVar(value="")
+        self.seq2_entry = ttk.Entry(helix, textvariable=self.seq2_var)
+        self.seq2_hint = ttk.Label(
+            helix,
+            text=(
+                "Blank = reverse complement of strand I, which puts complementary bases on the same level. "
+                "Both strands need the same length."
+            ),
+            style="Hint.TLabel",
+            wraplength=520,
+            justify="left",
+        )
+        self.seq2_label.grid(row=2, column=0, sticky="w", padx=label_pad, **field)
+        self.seq2_entry.grid(row=2, column=1, sticky="we", **field)
+        self.seq2_hint.grid(row=3, column=1, columnspan=2, sticky="w", pady=(0, 4))
+        self.seq2_label.grid_remove()
+        self.seq2_entry.grid_remove()
+        self.seq2_hint.grid_remove()
 
         self.z_len_label = ttk.Label(helix, text="Z-DNA helix length:", style="Field.TLabel")
         self.z_len_var = tk.StringVar(value="")
@@ -485,6 +524,29 @@ class App(tk.Tk):
             self.param_table.heading(key, text=PARAM_LABELS.get(key, key))
             self.param_table.column(key, width=82, minwidth=60, anchor="center", stretch=True)
         self.param_table.grid(row=1, column=0, sticky="we")
+
+        # P-DNA: the template's fixed helical parameters, read-only.
+        self.pdna_param_table = ttk.Treeview(
+            self.param_frame,
+            columns=("row_label", *[f"p{idx}" for idx in range(len(PDNA_PARAM_COLUMNS))]),
+            show="headings",
+            height=2,
+            selectmode="none",
+            style="Compact.Treeview",
+        )
+        self.pdna_param_table.heading("row_label", text="")
+        self.pdna_param_table.column("row_label", width=60, minwidth=56, anchor="w", stretch=False)
+        for idx, (heading, _value) in enumerate(PDNA_PARAM_COLUMNS):
+            self.pdna_param_table.heading(f"p{idx}", text=heading)
+            self.pdna_param_table.column(f"p{idx}", width=96, minwidth=72, anchor="center", stretch=True)
+        self.pdna_param_table.insert(
+            "", "end", values=("Fixed", *[_format_number(value) for _heading, value in PDNA_PARAM_COLUMNS])
+        )
+        self.pdna_param_table.insert(
+            "", "end", values=("Source", *["1PFI" for _column in PDNA_PARAM_COLUMNS])
+        )
+        self.pdna_param_table.grid(row=1, column=0, sticky="we")
+        self.pdna_param_table.grid_remove()
 
         left_col = ttk.Frame(form)
         left_col.grid(row=2, column=0, sticky="nsew", padx=(0, 6))
@@ -630,6 +692,8 @@ class App(tk.Tk):
         builders.grid(row=0, column=0, sticky="we")
         builders.add("B-Z builder", command=self.open_bz_builder_dialog,
                      description="Join alternating B/Z PDBs.", icon="tool:bz_builder")
+        builders.add("B-P builder", command=self.open_bp_builder_dialog,
+                     description="Join alternating B/P-DNA PDBs.", icon="tool:bp_builder")
         builders.add("Triplex converter", command=self.open_triplex_converter_dialog,
                      description="Add strand III; tune X-disp (e.g. -1.9 Å) and h-Twist (e.g. 30°) first.",
                      icon="tool:triplex")
@@ -713,6 +777,7 @@ class App(tk.Tk):
         self.dssr_status_var.trace_add("write", lambda *_args: self._refresh_dssr_chip())
 
         self.seq_var.trace_add("write", lambda *_args: self._update_sequence_length())
+        self.seq2_var.trace_add("write", lambda *_args: self._update_sequence_length())
         self.z_len_var.trace_add("write", lambda *_args: self._update_sequence_length())
         self.output_dir_var.trace_add("write", lambda *_args: self._refresh_info_text())
         self.invrot_operation_var.trace_add("write", lambda *_args: self._refresh_invrot_state())
@@ -842,6 +907,11 @@ class App(tk.Tk):
             self.min_hint_var.set("Default for B-DNA is to run phenix.geometry_minimization, matching the previous B-DNA workflow.")
         elif na_type in ("A-DNA", "A-RNA"):
             self.min_hint_var.set("Default for A-DNA/A-RNA is to skip minimization; check the box to run phenix.geometry_minimization.")
+        elif na_type == "P-DNA":
+            self.min_hint_var.set(
+                "Default for P-DNA is to keep the 1PFI template geometry as built; check the box to run "
+                "phenix.geometry_minimization."
+            )
         else:
             self.min_hint_var.set("")
 
@@ -2447,6 +2517,275 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         run_btn.configure(command=run_bz)
 
+    def open_bp_builder_dialog(self) -> None:
+        win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
+        win.title("B-P structure builder")
+        win.geometry("940x860+200+70")
+        win.minsize(820, 720)
+        win.transient(self)
+        body, footer = self._tool_dialog_frame(win, "B-P builder", tool="bp_builder")
+        body.grid_columnconfigure(1, weight=1)
+        body.grid_rowconfigure(1, weight=1)
+        body.grid_rowconfigure(8, weight=2)
+
+        try:
+            out_dir = Path(self.output_dir_var.get()).expanduser()
+            if not out_dir.is_absolute():
+                out_dir = out_dir.resolve()
+        except Exception:
+            out_dir = DEFAULT_OUTPUT_DIR
+
+        default_name = "make_BP_out.pdb"
+        files_view = ui.LogView(body, wrap="none", height=5, horizontal=True)
+        files_text = files_view.text
+        files_text.configure(background=ui.C.BG)
+        out_var = tk.StringVar(value=str(out_dir / default_name))
+        types_var = tk.StringVar(value="")
+        axis_mode_var = tk.StringVar(value="codirectional")
+        axis_source_var = tk.StringVar(value="auto")
+        out_default_mode = {"value": True}
+
+        def _files() -> list[str]:
+            return [line.strip() for line in files_text.get("1.0", "end").splitlines() if line.strip()]
+
+        def _input_default_dir() -> str:
+            files = _files()
+            if files:
+                try:
+                    return str(Path(files[0]).expanduser().resolve().parent)
+                except Exception:
+                    return str(out_dir)
+            return str(out_dir)
+
+        def _out_is_default_like() -> bool:
+            current = out_var.get().strip()
+            if not current:
+                return True
+            return Path(current).name == default_name and out_default_mode["value"]
+
+        def _update_default_output_from_inputs() -> None:
+            files = _files()
+            if files and _out_is_default_like():
+                try:
+                    out_var.set(str(Path(files[0]).expanduser().resolve().parent / default_name))
+                    out_default_mode["value"] = True
+                except Exception:
+                    pass
+
+        def add_files() -> None:
+            selected = filedialog.askopenfilenames(
+                title="Choose B-DNA and P-DNA input PDB files in construct order",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if not selected:
+                return
+            current = files_text.get("1.0", "end").strip()
+            added = "\n".join(selected)
+            files_text.delete("1.0", "end")
+            files_text.insert("1.0", (current + "\n" + added).strip() if current else added)
+            _update_default_output_from_inputs()
+
+        def clear_files() -> None:
+            files_text.delete("1.0", "end")
+
+        def browse_out() -> None:
+            current_out = Path(out_var.get().strip() or default_name).expanduser()
+            initialfile = current_out.name or default_name
+            initialdir = str(current_out.parent) if str(current_out.parent) not in ("", ".") else _input_default_dir()
+            selected = filedialog.asksaveasfilename(
+                title="Choose B-P output PDB",
+                initialdir=initialdir,
+                initialfile=initialfile,
+                defaultextension=".pdb",
+                filetypes=[("PDB files", "*.pdb"), ("All files", "*.*")],
+                parent=win,
+            )
+            if selected:
+                out_default_mode["value"] = False
+                out_var.set(selected)
+
+        field = {"pady": 4}
+        label_pad = (0, 14)
+        files_hint = ttk.Label(
+            body,
+            text=(
+                "Input PDB files in construct order, alternating B-DNA and P-DNA in either order: "
+                "B1, P1, B2, ... or P1, B1, P2, ..."
+            ),
+            style="Hint.TLabel",
+            wraplength=820,
+            justify="left",
+        )
+        files_hint.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self._wrap_to_width(body, files_hint)
+        files_view.grid(row=1, column=0, columnspan=3, sticky="nsew")
+
+        file_buttons = ttk.Frame(body)
+        file_buttons.grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 12))
+        ttk.Button(file_buttons, text="Add input PDBs", command=add_files).pack(side="left", padx=(0, 8))
+        ttk.Button(file_buttons, text="Clear", command=clear_files).pack(side="left")
+
+        ttk.Label(body, text="Output PDB:", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=label_pad, **field)
+        ttk.Entry(body, textvariable=out_var).grid(row=3, column=1, sticky="we", **field)
+        ttk.Button(body, text="Browse", command=browse_out).grid(row=3, column=2, sticky="we", padx=(8, 0), **field)
+
+        ttk.Label(body, text="Helix types:", style="Field.TLabel").grid(row=4, column=0, sticky="w", padx=label_pad, **field)
+        types_row = ttk.Frame(body)
+        types_row.grid(row=4, column=1, columnspan=2, sticky="we", **field)
+        ttk.Entry(types_row, textvariable=types_var, width=18).pack(side="left")
+        ttk.Label(
+            types_row,
+            text="Blank detects B or P from the phosphate radius; or type one letter per file, e.g. BPB.",
+            style="Hint.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
+
+        ttk.Label(body, text="Axis correction:", style="Field.TLabel").grid(
+            row=5, column=0, sticky="w", padx=label_pad, **field
+        )
+        axis_mode_row = ttk.Frame(body)
+        axis_mode_row.grid(row=5, column=1, columnspan=2, sticky="we", **field)
+        ttk.Combobox(
+            axis_mode_row,
+            textvariable=axis_mode_var,
+            values=("codirectional", "collinear", "none"),
+            state="readonly",
+            width=16,
+        ).pack(side="left")
+        ttk.Label(
+            axis_mode_row,
+            text="Default codirectional rotates helix axes parallel without lateral axis-line shift.",
+            style="Hint.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
+
+        ttk.Label(body, text="B-DNA axis source:", style="Field.TLabel").grid(
+            row=6, column=0, sticky="w", padx=label_pad, **field
+        )
+        axis_source_row = ttk.Frame(body)
+        axis_source_row.grid(row=6, column=1, columnspan=2, sticky="we", **field)
+        ttk.Combobox(
+            axis_source_row,
+            textvariable=axis_source_var,
+            values=("auto", "dssr", "screw", "pca"),
+            state="readonly",
+            width=16,
+        ).pack(side="left")
+        ttk.Label(
+            axis_source_row,
+            text=(
+                "auto tries DSSR --more, then the helix's screw axis. P-DNA axes always come from its screw "
+                "symmetry."
+            ),
+            style="Hint.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
+
+        builder_hint = ttk.Label(
+            body,
+            text=(
+                "Each junction inserts a B-P core: the B-DNA end hands its 2 terminal base pairs to the core and the "
+                "P-DNA end's 2 terminal levels become the transition, in which the backbone moves from the B-DNA "
+                "radius into the P-DNA core. All bases are kept, so the output strands carry the input sequences. "
+                "A B-DNA needs at least 3 bp (5 with junctions at both ends) and a P-DNA at least 4 levels (7 with junctions at both ends). Use bnp_na-built "
+                "helices; default B-DNA (minimized and regularized) fits the core exactly. The transition is a "
+                "model, not an experimental structure. Output: a ligated PDB and a raw aligned PDB with _raw "
+                "before the extension."
+            ),
+            style="Hint.TLabel",
+            wraplength=820,
+            justify="left",
+        )
+        builder_hint.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 12))
+        self._wrap_to_width(body, builder_hint)
+
+        footer.add_button("Close", win.destroy)
+        run_btn = footer.add_button("Build B-P structure", primary=True)
+
+        bp_log_view = ui.LogView(body, wrap="none", height=10, horizontal=True)
+        bp_log_view.grid(row=8, column=0, columnspan=3, sticky="nsew")
+        bp_log = bp_log_view.text
+
+        def _set_dialog_log(text: str) -> None:
+            bp_log.delete("1.0", "end")
+            bp_log.insert("1.0", text)
+            bp_log.see("end")
+            win.update_idletasks()
+
+        def run_bp() -> None:
+            files = _files()
+            if len(files) < 2:
+                messagebox.showerror(
+                    "B-P structure builder", "Please provide at least two files: one B-DNA and one P-DNA.", parent=win
+                )
+                return
+            if _out_is_default_like():
+                _update_default_output_from_inputs()
+            out_text = out_var.get().strip() or str(Path(_input_default_dir()) / default_name)
+
+            run_btn.configure(state="disabled")
+            start_log = (
+                f"=== {APP_NAME} {__version__} B-P job started ===\n"
+                f"Input files: {len(files)}\n"
+                f"Output PDB: {out_text}\n"
+                f"Helix types: {types_var.get().strip() or 'auto-detect'}\n"
+                f"Axis correction: {axis_mode_var.get()}\n"
+                f"B-DNA axis source: {axis_source_var.get()}\n"
+            )
+            _set_dialog_log(start_log)
+            self._set_log(start_log)
+
+            try:
+                result = build_bp_structure(
+                    files,
+                    out_text,
+                    types=types_var.get().strip(),
+                    axis_mode=axis_mode_var.get(),
+                    axis_source=axis_source_var.get(),
+                )
+                pdb_out = Path(str(result["pdb_out"]))
+                remarks_log = _prepend_final_pdb_remarks(
+                    pdb_out,
+                    na_type="B-P DNA",
+                    l_form_enabled=False,
+                    invrot_result=None,
+                )
+                full_log = "\n".join(
+                    [
+                        f"=== {APP_NAME} {__version__} B-P job summary ===",
+                        f"Final B-P PDB: {pdb_out}",
+                        f"Raw aligned PDB: {result['pdb_raw']}",
+                        f"Helix types: {result['types']}",
+                        f"Axis correction: {result['axis_mode']}",
+                        f"B-DNA axis source: {result['axis_source']}",
+                        "",
+                        str(result.get("log_text", "")),
+                        "",
+                        remarks_log,
+                    ]
+                )
+                _set_dialog_log(full_log)
+                self._set_log(full_log)
+                messagebox.showinfo(
+                    "B-P structure builder",
+                    f"Final B-P PDB:\n{pdb_out}\n\nRaw aligned PDB:\n{result['pdb_raw']}",
+                    parent=win,
+                )
+            except PipelineError as exc:
+                log_text = getattr(exc, "log_text", "") or str(exc)
+                _set_dialog_log(log_text)
+                self._set_log(log_text)
+                messagebox.showerror("B-P structure builder", str(exc), parent=win)
+            finally:
+                run_btn.configure(state="normal")
+
+        run_btn.configure(command=run_bp)
+
     def open_triplex_converter_dialog(self) -> None:
         win = tk.Toplevel(self)
         self._set_optional_window_icon(win)
@@ -2797,13 +3136,23 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
     def _refresh_info_text(self) -> None:
         out = self.output_dir_var.get().strip() or "<not selected>"
         tmp = str(Path(out).expanduser() / "tmp_file") if out != "<not selected>" else "<not selected>"
-        pipeline = (
-            "Pipeline: build by selected type -> normalize names -> optional phenix.geometry_minimization "
-            "for B-DNA/A-DNA/A-RNA"
-        )
-        if hasattr(self, "regularize_phosphates_var") and self.regularize_phosphates_var.get():
+        na_type = self.na_type_var.get().strip() if hasattr(self, "na_type_var") else ""
+        if na_type == "P-DNA":
+            pipeline = (
+                "Pipeline: P-DNA from the 1PFI template (bases grafted per strand) -> normalize names -> "
+                "optional phenix.geometry_minimization"
+            )
+        else:
+            pipeline = (
+                "Pipeline: build by selected type -> normalize names -> optional phenix.geometry_minimization "
+                "for B-DNA/A-DNA/A-RNA/P-DNA"
+            )
+        if hasattr(self, "regularize_phosphates_var") and self.regularize_phosphates_var.get() and na_type != "Z-DNA":
             pipeline += " -> regularize phosphates from C1' helical symmetry"
-        pipeline += " -> DSSR --more axis extraction -> align to +Z"
+        if na_type == "P-DNA":
+            pipeline += " -> align to +Z by superposing onto the ideal template model (DSSR finds no P-DNA helix)"
+        else:
+            pipeline += " -> DSSR --more axis extraction -> align to +Z"
         if hasattr(self, "invrot_enabled_var") and self.invrot_enabled_var.get():
             pipeline += f" -> inv/rot mirror ({self.invrot_operation_var.get().strip() or 'i'})"
         pipeline += " -> orient/place."
@@ -2823,6 +3172,15 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         na_type = self.na_type_var.get().strip()
         defaults = self._current_defaults()
         store = self._current_param_store()
+        if na_type == "P-DNA":
+            self.param_frame.set_title("P-DNA helical parameters (fixed)")
+            self.param_status_var.set(PDNA_PARAM_NOTE)
+            self.param_table.delete(*self.param_table.get_children())
+            self.param_table.grid_remove()
+            self.pdna_param_table.grid()
+            return
+        self.param_frame.set_title("Current DSSR helical parameters")
+        self.pdna_param_table.grid_remove()
         if defaults is None or store is None:
             self.param_status_var.set("Z-DNA uses DSSR fiber; the 12-parameter table is not used.")
             self.param_table.delete(*self.param_table.get_children())
@@ -2881,6 +3239,24 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             return
 
         seq_text = self.seq_var.get().strip()
+        if na_type == "P-DNA":
+            if not seq_text:
+                self.length_var.set("Length: 0 nt per strand")
+                return
+            try:
+                seq1 = expand_sequence(seq_text, alphabet="ATCG")
+                seq2_text = self.seq2_var.get().strip()
+                if seq2_text:
+                    seq2 = expand_sequence(seq2_text, alphabet="ATCG")
+                    if len(seq2) != len(seq1):
+                        self.length_var.set(f"Length: strand I {len(seq1)} nt, strand II {len(seq2)} nt (must match)")
+                        return
+                resolve_pdna_sequences(seq_text, seq2_text)
+                note = "; strand II = reverse complement" if not seq2_text else ""
+                self.length_var.set(f"Length: {len(seq1)} nt per strand{note}")
+            except Exception as exc:
+                self.length_var.set(f"Length: invalid sequence ({exc})")
+            return
         if not seq_text:
             self.length_var.set("Length: 0 bp")
             return
@@ -2894,6 +3270,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         na_type = self.na_type_var.get().strip()
         defaults = self._current_defaults()
         store = self._current_param_store()
+        if na_type == "P-DNA":
+            messagebox.showinfo("P-DNA", PDNA_PARAM_NOTE, parent=self)
+            return
         if defaults is None or store is None:
             messagebox.showinfo("Z-DNA", "Z-DNA uses DSSR fiber; the 12-parameter table is not used.", parent=self)
             return
@@ -3235,6 +3614,13 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             self.regularize_phosphates_by_type[old_type] = bool(self.regularize_phosphates_var.get())
 
         na_type = self.na_type_var.get().strip()
+        is_pdna = na_type == "P-DNA"
+        self.seq_label.configure(text="Strand I (5'->3'):" if is_pdna else "Sequence (5'->3'):")
+        for widget in (self.seq2_label, self.seq2_entry, self.seq2_hint):
+            if is_pdna:
+                widget.grid()
+            else:
+                widget.grid_remove()
         if na_type == "Z-DNA":
             self.seq_entry.configure(state="disabled")
             self.custom_btn.configure(state="disabled")
@@ -3245,7 +3631,8 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             self.min_frame.grid_remove()
         else:
             self.seq_entry.configure(state="normal")
-            self.custom_btn.configure(state="normal")
+            # P-DNA parameters come from the 1PFI template and cannot be customized.
+            self.custom_btn.configure(state="disabled" if is_pdna else "normal")
             self.z_len_entry.configure(state="disabled")
             self.z_len_label.grid_remove()
             self.z_len_entry.grid_remove()
@@ -3387,6 +3774,21 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     raise ValueError("Z-DNA helix length must be a positive even integer.") from exc
                 result = build_zdna(length_value, user_name, tmp_dir, deleteH=deleteH)
 
+            elif na_type == "P-DNA":
+                seq_in = self.seq_var.get().strip()
+                if not seq_in:
+                    raise ValueError("Please enter the strand I DNA sequence using A/T/C/G.")
+                result = build_pdna(
+                    seq_in,
+                    user_name,
+                    tmp_dir,
+                    seq_strand2=self.seq2_var.get().strip() or None,
+                    deleteH=deleteH,
+                    run_phenix=run_phenix,
+                    params_file=params_for_min,
+                    run_regularize_phosphates=run_regularize_phosphates,
+                )
+
             else:
                 raise ValueError(f"Unsupported type: {na_type}")
 
@@ -3422,15 +3824,16 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 invrot_result=invrot_result,
             )
 
+            length_unit = "nt per strand" if na_type == "P-DNA" else "bp"
             log_parts = [
                 f"=== {APP_NAME} {__version__} job summary ===",
                 f"Final placed PDB: {placed_pdb}",
                 f"Intermediate files: {tmp_dir}",
-                f"Length: {result.get('length')} bp",
+                f"Length: {result.get('length')} {length_unit}",
                 "",
                 str(result.get("log_text", "")),
             ]
-            if param_overrides and na_type != "Z-DNA":
+            if param_overrides and na_type in NA_TYPES_WITH_TABLE:
                 log_parts += [
                     "",
                     "=== GUI parameter overrides applied ===",

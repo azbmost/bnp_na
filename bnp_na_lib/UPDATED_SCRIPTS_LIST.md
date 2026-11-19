@@ -1,4 +1,4 @@
-# bnp_na V13.20 updated folder
+# bnp_na V13.22 updated folder
 
 Top-level app folder contains only:
 
@@ -13,7 +13,11 @@ Top-level app folder contains only:
 - `build_adna.py` — A-DNA builder using `x3dna-dssr rebuild --backbone=A-DNA --par-type=heli`; optional phenix.geometry_minimization; no twist warp.
 - `build_arna.py` — A-RNA builder using `x3dna-dssr rebuild --backbone=RNA --par-type=heli`; optional phenix.geometry_minimization.
 - `build_zdna.py` — Z-DNA builder using DSSR fiber; no phenix.geometry_minimization option.
+- `build_pdna.py` — P-DNA builder from the bundled 1PFI template: one sequence per strand (strand II defaults to the reverse complement), standard-frame base grafting, optional phenix.geometry_minimization and phosphate regularization, align-to-Z by superposition onto the ideal model; also a direct CLI.
+- `core_PDNA.py` — bundled P-DNA template level (C17/D17 of `1PFI-DNA_only_ligated.pdb`), its exact helical symmetry, and the template analysis (level register and 2-nt 3' overhangs).
+- `standard_bases.py` — standard A/C/G/T base geometry in the standard reference frame (from DSSR) and base grafting that keeps the sugar-phosphate backbone.
 - `build_bz.py` — bnp_na wrapper for running the B-Z structure builder from the main GUI and capturing the log/output paths.
+- `build_bp.py` — bnp_na wrapper for running the B-P structure builder from the main GUI and capturing the log/output paths.
 - `build_triplex.py` — bnp_na wrapper for previewing duplex chains/sequences and running the triplex converter from the main GUI, with optional phenix.geometry_minimization and phosphate regularization of the converted triplex.
 - `add_phosphates.py` — terminal phosphate reporter and neighbor-geometry phosphate-placement helper for the main GUI's Add phosphates tool.
 - `regularize_phosphates.py` — C1'-derived helical-symmetry regularizer for P/OP1/OP2/O5'/C5'/O3', including terminal propagation, a reusable API, and a direct CLI.
@@ -24,6 +28,8 @@ Top-level app folder contains only:
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
 - `make_BZV2_3.py` — standalone B-Z structure builder incorporated into V13.6; combines alternating B-DNA/Z-DNA PDB inputs using B-Z junction cores.
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
+- `make_BP.py` — B-P structure builder: combines alternating B-DNA/P-DNA PDB inputs (either order, types detected or given) through B-P junction cores, keeping every input base; rigid fits only, so a build is immediate; direct CLI.
+- `core_BP.py` — bundled, modeled B-P junction core: two B base pairs, two transition levels and two P levels, clash-free for every base choice.
 - `convert_to_triplex_pdbV2_1.py` — standalone duplex-to-triplex converter incorporated into V13.7; supports antiparallel G·G-C and parallel T·A-T triplex motifs.
 - `geometry_utils.py` — shared rotation/vector helpers.
 - `na_placer.py` — final orient/place transformation after +Z alignment.
@@ -31,8 +37,18 @@ Top-level app folder contains only:
 - `pdb_name_standard.py` — nucleotide residue/atom-name normalization; changed from the previous script name `pdb_make_dna_v3_2.py`.
 - `xyz_bild.py` — coordinate-axis BILD writer with configurable arrow length and width.
 - `edit_pdb_atom.py` — PDB parser/writer helper.
+- `azbmost_ui.py`, `azbmost_icons.py` — the shared AZBMOST look (theme, window parts, vector icons); identical copies across AZBMOST modules.
+- `bnp_na_icons.py` — bnp_na-only tool icons (the B-P builder glyph), registered at import so the shared AZBMOST files stay identical.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.22 changes
+
+1. Version is `bnp_na V13.22`; run `python bnp_na.py -v` or `python bnp_na.py --version` to print it.
+2. P-DNA is a fifth nucleic acid type, built from the 1PFI template with one sequence per strand; its fixed helical parameters are shown read-only.
+3. A `B-P builder` under `Builders` joins alternating B-DNA and P-DNA PDB files through a bundled B-P junction core.
+4. New helper modules: `build_pdna.py`, `core_PDNA.py`, `standard_bases.py`, `make_BP.py`, `core_BP.py`, `build_bp.py`, `bnp_na_icons.py`.
+5. `bnp_na_lib/__init__.py` and this file's header, left at V13.20 by V13.21, now read V13.22.
 
 ## V13.20 changes
 

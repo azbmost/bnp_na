@@ -1,2 +1,2 @@
-"""Helper modules for bnp_na V13.20."""
-__version__ = "V13.20"
+"""Helper modules for bnp_na V13.22."""
+__version__ = "V13.22"

@@ -1,22 +1,24 @@
 # bnp_na
 
-`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
+`bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, Z-DNA, and P-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z and B-P structure building, and triplex conversion.
 
-The current app version is `V13.21`.
+The current app version is `V13.22`.
 
 ## What It Does
 
 - Builds B-DNA, A-DNA, and A-RNA from a 5' to 3' sequence using DSSR helical-parameter tables.
 - Builds Z-DNA from a positive even base-pair length using DSSR fiber generation.
+- Builds P-DNA (the Pauling-like DNA of the Pf1 phage, PDB 1PFI: phosphates at the center, bases outward, no base pairs) from one sequence per strand, using the bundled 1PFI template backbone; strand II defaults to the reverse complement.
 - Lets you customize the 12 DSSR base-pair/helical parameters for B-DNA, A-DNA, and A-RNA.
 - Optionally finds the B-DNA X-disp that places opposing phosphate P atoms across the helix axis, for either the raw DSSR rebuild or the minimized and phosphate-regularized pipeline; off by default and only needed for "ideal helix" work.
-- Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, and A-RNA.
+- Optionally runs `phenix.geometry_minimization` for B-DNA, A-DNA, A-RNA, and P-DNA.
 - Optionally restores exact helical periodicity to every atom selected by `min_P_C5.params` after minimization using C1' atoms.
 - Normalizes nucleotide residue and atom names in generated PDB files.
 - Aligns the generated helix to +Z using DSSR axis information.
 - Aligns any input helix PDB to +Z from `Other tools`.
 - Optionally applies an inversion/reflection operation to make mirror-image L-form nucleic-acid models.
 - Builds B-Z DNA constructs from alternating B-DNA/Z-DNA PDB files using bundled B-Z junction core data.
+- Builds B-P DNA constructs from alternating B-DNA/P-DNA PDB files using a bundled, modeled B-P junction core that keeps every input base.
 - Converts an input duplex DNA PDB into a triplex by adding strand III over a selected residue range.
 - Combines multiple PDB files, optionally using only selected chains from each file, while assigning unique consecutive chain IDs in input order.
 - Reports and adds missing 5' and 3' terminal phosphates, with optional preceding 5'-terminal `O3'` atoms, from `Other tools`.
@@ -95,16 +97,18 @@ If you have local edits, commit or stash them before pulling so Git can merge cl
 
 1. Start the GUI with `python3 bnp_na.py`.
 2. Check the startup status line for `x3dna-dssr`.
-3. Choose `B-DNA`, `A-DNA`, `A-RNA`, or `Z-DNA`.
-4. Enter a sequence for B-DNA, A-DNA, or A-RNA, or enter an even base-pair length for Z-DNA.
+3. Choose `B-DNA`, `A-DNA`, `A-RNA`, `Z-DNA`, or `P-DNA`.
+4. Enter a sequence for B-DNA, A-DNA, or A-RNA, an even base-pair length for Z-DNA, or the strand I sequence (and optionally strand II) for P-DNA.
 5. Choose an output folder.
 6. Adjust DSSR parameters, minimization, hydrogens, mirror-image L-form conversion, and placement values if needed.
 7. Click `Generate`.
 8. Read the embedded log for the exact commands, intermediate files, and final placed PDB path.
 
-For B-Z junction constructs, click the `B-Z builder` button on the same row as the `B-DNA`, `A-DNA`, `A-RNA`, and `Z-DNA` choices. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
+For B-Z junction constructs, click `B-Z builder` under `Builders`. That tool combines existing B-DNA and Z-DNA PDB files rather than generating a single helix from the sequence field.
 
-For triplex construction from an existing duplex PDB, click the `Triplex converter` button directly to the right of `B-Z builder`.
+For B-DNA/P-DNA junction constructs, click `B-P builder` under `Builders`. It combines existing B-DNA and P-DNA PDB files the same way.
+
+For triplex construction from an existing duplex PDB, click `Triplex converter` under `Builders`.
 
 To merge existing coordinate files, click `Combine_PDB` in `Other tools`, choose the number of inputs, and fill the dynamically generated PDB fields in the desired chain order. Each field has its own `Chains` box for combining only part of a file.
 
@@ -120,7 +124,7 @@ The app uses DSSR for these jobs:
 
 - `rebuild` for B-DNA, A-DNA, and A-RNA.
 - `fiber --model=Z-DNA` for Z-DNA.
-- `--more` axis extraction before align-to-Z placement.
+- `--more` axis extraction before align-to-Z placement (not for P-DNA, in which DSSR finds no pairs, stacks or helix).
 - `--more` axis extraction for selected-chain helical-axis information in `Other tools`.
 - `--more` axis extraction for the standalone `Align helix to z` tool in `Other tools`.
 
@@ -139,6 +143,8 @@ A10T5C2G
 This expands to ten `A` bases, five `T` bases, two `C` bases, and one `G` base. Counts must be positive integers.
 
 Two-strand syntax such as `lead:follow` is not supported in this version. The GUI expects one 5' to 3' sequence and chooses the complementary pair labels internally.
+
+For P-DNA the field is labeled `Strand I (5'->3')`, and a second field, `Strand II (5'->3', optional)`, appears below it. P-DNA forms no base pairs, so the two strands can carry any sequences of the same length. Leave strand II blank to use the reverse complement of strand I, which puts complementary bases on the same level. Both fields accept the compact count syntax.
 
 ### Z-DNA Helix Length
 
@@ -208,11 +214,38 @@ x3dna-dssr fiber --model=Z-DNA
 
 The Z-DNA GUI path does not use the DSSR 12-parameter table and does not offer Phenix minimization.
 
+### P-DNA
+
+P-DNA is the Pauling-like DNA found in the Pf1 filamentous phage (PDB `1PFI`). Both strands wind around the helix axis with their phosphates at the center and every base pointing outward, so no base pairs form. bnp_na builds it from the bundled template level in `bnp_na_lib/core_PDNA.py`, taken from `1PFI-DNA_only_ligated.pdb` (chains C and D, poly(dC), 35 nt each).
+
+The template is exactly helical. Its fixed helical parameters are shown read-only in the parameter card when `P-DNA` is selected; `Customize DSSR parameters` is disabled because they cannot be changed:
+
+| Parameter | Value |
+| --- | --- |
+| h-Rise | 6.10 Å per nucleotide |
+| h-Twist | 131.84° per nucleotide, right-handed |
+| nt per turn | 2.73 |
+| Pitch | 16.66 Å |
+| P radius | 2.50 Å |
+| C1' radius | 4.28 Å |
+
+Registering the template strands by nucleotide level (C1' height), C_i sits at the level of D_(34-i), so the deposited model pairs C1-C33 with D33-D1 and each strand carries a 2-nt 3' overhang: C34-C35 at the top and D34-D35 at the bottom. bnp_na builds blunt P-DNA: level k holds strand I nucleotide k (chain A, 5'->3' along +Z) and strand II nucleotide N+1-k (chain B), and level 1 is centered on the origin. The two C1' atoms of a level are 130.6° apart about the axis, as in a Watson-Crick pair.
+
+Each base is replaced by the requested one in the standard base reference frame, with the standard C1'-N glycosidic bond. Purines are turned 8° about the glycosidic bond relative to the poly(dC) template; without that, the minor-groove edges of two purines on neighboring levels of opposite strands come within 2.9 Å. The build log reports the linkage, glycosidic and closest-contact checks.
+
+P-DNA defaults to skipping `phenix.geometry_minimization` and phosphate regularization, but you can enable both. DSSR finds no helix in P-DNA, so instead of DSSR align-to-Z the model is superposed onto the ideal template-built model, whose axis is +Z by construction.
+
+The builder also runs standalone:
+
+```bash
+python3 bnp_na_lib/build_pdna.py ACGTACGTAC --strand2 GGGGGCCCCC --name P10 --out-dir out
+```
+
 ## B-Z Structure Builder
 
 The B-Z structure builder is based on the bundled `bnp_na_lib/make_BZV2_3.py` and `bnp_na_lib/core_BZ.py` scripts. This tool is different from the main `Generate` button: it does not read the sequence field and it does not create one isolated helix. Instead, it takes already-built B-DNA and Z-DNA PDB files and joins them through B-Z junction core structures.
 
-In the main GUI, use the `B-Z builder` button directly after the four helix-type choices:
+In the main GUI, use `B-Z builder` under `Builders`:
 
 ```text
 B-Z builder
@@ -329,6 +362,61 @@ python3 bnp_na_lib/make_BZV2_3.py \
   --no-z-auto-trim \
   --out multi_BZ.pdb \
   B1.pdb Z1.pdb
+```
+
+## B-P Structure Builder
+
+The B-P structure builder joins already-built B-DNA and P-DNA PDB files into one construct, the same way the B-Z builder joins B-DNA and Z-DNA. It is based on `bnp_na_lib/make_BP.py` and the bundled junction core `bnp_na_lib/core_BP.py`. Open it with `B-P builder` under `Builders`.
+
+The build is immediate. It only fits the core and the helices as rigid bodies, trims, grafts bases, and ligates; nothing is relaxed or refined when you run it.
+
+### Input Order
+
+Add the input PDB files in construct order, alternating B-DNA and P-DNA. Either type may come first:
+
+```text
+B1.pdb P1.pdb B2.pdb ...
+P1.pdb B1.pdb P2.pdb ...
+```
+
+The type of each file is detected from its geometry: P-DNA has its phosphates within 5 Å of the helix axis, B-DNA near 9.5 Å. To set the types yourself, type one letter per file in `Helix types`, for example `BPB`.
+
+Use helices built by bnp_na. A default B-DNA (DSSR rebuild, minimized and regularized) matches the core's B base pairs exactly, and every bnp_na P-DNA matches its P levels exactly. Other B-DNA models are fitted on the sugar atoms and the fit RMSD is reported in the log.
+
+### What The Builder Does
+
+The bundled core holds two B-DNA base pairs, two transition levels, and two P-DNA levels. For every neighboring pair of input helices, the builder:
+
+- Inserts one fresh copy of the core and fits it to the previous helix on sugar atoms `C1'`, `C2'`, `C3'`, `C4'`, `O5'`, and `C5'`.
+- Fits the next helix to the other end of the core.
+- At the B-DNA end, replaces the helix's two terminal base pairs with the core's two B base pairs, which take over their bases. Every B-DNA base pair is kept.
+- At the P-DNA end, rebuilds the helix's two terminal levels as the core's transition levels, which take over their bases. The P-DNA keeps its own nucleotides from the third level on; the core's P levels only position it.
+- Writes a final ligated PDB with two continuous strands numbered 5' to 3', and a raw aligned PDB with `_raw` before the file extension.
+
+Bases are grafted in the standard base reference frame, so the output strands carry exactly the input sequences, and chain A of the first input stays in output chain A. A B-DNA needs at least 3 bp for one junction end (5 bp with junctions at both ends); a P-DNA needs at least 4 levels for one junction end and 7 with junctions at both ends, so that three P-form levels separate the two transitions.
+
+### The Junction Model
+
+There is no experimental structure of a B-DNA/P-DNA junction, so the core is a model. In the transition the backbone runs from the B-DNA radius (P at about 9.5 Å) into the P-DNA center (P at 2.5 Å) over two nucleotides on each strand, while the last B-DNA base pair stays paired; the first P-form level sits 10 Å above that base pair.
+
+The core was built once, offline, by torsion-space loop closure from ideal nucleotide geometry, and checked so that it holds for any sequence: every base near the junction was scored as the union of A, C, G and T, and MolProbity found no clashes for any of 88 base assignments tested. The transition nucleotides' bonds and angles are within 0.8σ and 2.3σ of Phenix's restraints, and every O3'-P bond through the transition is 1.60-1.61 Å. See the `core_BP.py` docstring for details.
+
+### Axis Correction And Axis Source
+
+`Axis correction` works as in the B-Z builder: `codirectional` (default), `collinear`, or `none`. The core's B and P parts are coaxial, so for bnp_na-built inputs the correction is close to zero.
+
+`B-DNA axis source` chooses how B-DNA axes are found: `auto` (default) tries DSSR `--more` and falls back to the helix's screw axis; `dssr` requires DSSR; `screw` fits the screw that maps each base pair onto the next; `pca` uses the `C1'` principal axis, which is biased for helices shorter than about two turns. P-DNA axes always come from the helix's own screw symmetry, because DSSR finds no helix in P-DNA.
+
+### Direct Command-Line Use
+
+```bash
+python3 bnp_na_lib/make_BP.py --out B_P_B.pdb B1.pdb P1.pdb B2.pdb
+```
+
+Give the types explicitly and skip axis correction:
+
+```bash
+python3 bnp_na_lib/make_BP.py --types PB --axis-mode none --out P_B.pdb P1.pdb B1.pdb
 ```
 
 ## Triplex Converter
@@ -684,7 +772,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.21 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.22 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -1157,7 +1245,9 @@ The final placed model is written outside `tmp_file/`:
 <output folder>/<helix-name>_oriented_placed.pdb
 ```
 
-B-Z builder outputs are written to the path chosen in the B-Z dialog. They are not placed in `tmp_file/` unless you explicitly choose that folder. The paired raw aligned file is written beside the final B-Z PDB with `_raw` added to the filename.
+For a P-DNA named `P-DNA20`, the intermediate files are `P-DNA20-1PFI.pdb` (the template-built model), `P-DNA20-1PFI_out.pdb` (names normalized), the optional `_minimized` and `_regularized_phosphates` files, and the `_aligned2Z` file that is placed.
+
+B-Z builder outputs are written to the path chosen in the B-Z dialog. They are not placed in `tmp_file/` unless you explicitly choose that folder. The paired raw aligned file is written beside the final B-Z PDB with `_raw` added to the filename. B-P builder outputs follow the same rule with the path chosen in the B-P dialog.
 
 ## Common Problems
 
@@ -1186,6 +1276,14 @@ Z-DNA length must be positive and even. Examples that work: `10`, `20`, `42`. Ex
 The B-Z builder assumes the input order is B, Z, B, Z, starting with B. It does not infer B or Z from filenames. Check the file list in the B-Z dialog before running.
 
 If the error mentions Z-DNA terminal phase, turn on `Auto-trim terminal Z-DNA bp if needed`, or regenerate the Z-DNA input 2 bp longer than the target final Z segment. The builder needs selected Z chains to start with a pyrimidine and end with a purine.
+
+### P-DNA Strand Lengths Differ
+
+P-DNA is built level by level, so strand I and strand II need the same number of nucleotides. Leave `Strand II` blank to use the reverse complement of strand I.
+
+### B-P Builder Types Or Lengths Failed
+
+Inputs must alternate between B-DNA and P-DNA. If the detected types look wrong, set them in `Helix types`, for example `BPB`. Each B-DNA needs at least 3 bp (5 with junctions at both ends) and each P-DNA at least 4 levels (7 with junctions at both ends).
 
 ### Triplex Converter Range Or Partner Strand Failed
 
@@ -1241,6 +1339,13 @@ bnp_na_lib/regularize_phosphates.py C1'-derived phosphate helical-symmetry regul
 bnp_na_lib/combine_pdb.py   Multi-PDB combiner with per-file chain selection, chain/serial plus LINK/REMARK metadata updating
 bnp_na_lib/angle_helical_axisV2_2.py Helical-axis radial-angle and 2-fold symmetry-axis BILD writer
 bnp_na_lib/build_bz.py      bnp_na wrapper for the B-Z junction builder
+bnp_na_lib/build_pdna.py    P-DNA builder from the 1PFI template (GUI pipeline and CLI)
+bnp_na_lib/core_PDNA.py     Bundled 1PFI P-DNA template level and its helical symmetry
+bnp_na_lib/standard_bases.py Standard base geometry and base grafting
+bnp_na_lib/build_bp.py      bnp_na wrapper for the B-P junction builder
+bnp_na_lib/make_BP.py       Standalone B-P structure builder CLI
+bnp_na_lib/core_BP.py       Bundled, modeled B-P junction core structure data
+bnp_na_lib/bnp_na_icons.py  bnp_na-only tool icons added to the shared AZBMOST set
 bnp_na_lib/build_triplex.py bnp_na wrapper for the triplex converter
 bnp_na_lib/helical_axis_info.py DSSR selected-chain helical-axis reporter and BILD writer
 bnp_na_lib/make_BZV2_3.py   Standalone B-Z structure builder CLI/GUI

@@ -2,6 +2,27 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.22
+
+- Added P-DNA as a fifth nucleic acid type. P-DNA is the Pauling-like DNA of the Pf1 filamentous phage (PDB 1PFI): both strands wind around the axis with their phosphates at the center (P at r = 2.50 Å) and every base pointing outward, so no base pairs form.
+- The backbone comes from one template level of `1PFI-DNA_only_ligated.pdb`, bundled as `bnp_na_lib/core_PDNA.py`. The template is exactly helical: 131.84° and 6.10 Å per nucleotide (2.73 nt per turn, pitch 16.66 Å), with a dyad on the x axis relating the strands.
+- Template check: registered by nucleotide level (C1' height), C_i sits at the level of D_(34-i), so the deposited 35-nt strands share 33 levels and each strand carries a 2-nt 3' overhang (C34-C35 at the top, D34-D35 at the bottom). bnp_na builds blunt P-DNA; level 1 is centered on the origin and strand I (chain A) runs 5'->3' along +Z.
+- Each strand takes its own sequence: the sequence field becomes `Strand I (5'->3')` and a new `Strand II (5'->3', optional)` field appears for P-DNA. Blank strand II is the reverse complement of strand I, which puts complementary bases on the same level; both strands must have the same length.
+- Bases are grafted in the standard base reference frame with the standard glycosidic bond. Purines are turned 8° about the glycosidic bond relative to the poly(dC) template, because otherwise two purines on neighboring levels of opposite strands come within 2.9 Å.
+- The parameter card shows the fixed P-DNA helical parameters read-only, and `Customize DSSR parameters` is disabled for P-DNA.
+- P-DNA builds instantly from the template. phenix.geometry_minimization and phosphate regularization are off by default and can be enabled. DSSR finds no helix in P-DNA, so align-to-Z superposes the model onto the ideal template-built model instead of calling DSSR.
+- `bnp_na_lib/build_pdna.py` also runs standalone (`--help`).
+- Added a `B-P builder` under `Builders`, with `bnp_na_lib/make_BP.py` (standalone CLI) and `bnp_na_lib/build_bp.py`, for B-DNA/P-DNA junction constructs, following the B-Z builder.
+- Inputs alternate between B-DNA and P-DNA in either order; types are detected from the phosphate radius or given as letters such as `BPB`.
+- A bundled junction core (`bnp_na_lib/core_BP.py`) is fitted to each junction. The B-DNA end hands its two terminal base pairs to the core, and the P-DNA end's two terminal levels become the transition, in which the backbone runs from the B-DNA radius into the P-DNA center. All bases are grafted over, so the output strands carry exactly the input sequences, and chain A of the first input stays in output chain A.
+- There is no experimental B-P junction structure. The core was modeled once, offline, by torsion-space loop closure from ideal nucleotide geometry (see the `core_BP.py` docstring). MolProbity finds no clashes in it for any of 88 base assignments tested, and its transition bonds and angles are within 0.8σ and 2.3σ of Phenix's restraints.
+- Building a junction is only rigid fitting, trimming, base grafting and ligation, with no relaxation, so it is immediate (about 0.1 s for B-P-B including the DSSR axis calls). Full B-P, P-B and B-P-B constructs from default bnp_na helices scored clashscore 0.
+- A B-DNA needs at least 3 bp for one junction end and 5 with junctions at both ends; a P-DNA needs 4 levels for one end and 7 with junctions at both ends, because with 6 the two transitions reach into each other.
+- B-DNA axes for the B-P builder come from DSSR, falling back to the helix's screw axis; P-DNA axes always come from the helix's screw symmetry. A `screw` axis source was added next to `auto`, `dssr` and `pca`.
+- Added `bnp_na_lib/standard_bases.py` (standard base geometry and grafting) and `bnp_na_lib/bnp_na_icons.py`, which registers the B-P builder icon at import so the shared AZBMOST UI files stay identical to the other modules' copies.
+- Added regression coverage for P-DNA sequences, geometry, base grafting and the build pipeline, and for B-P, P-B and B-P-B constructs.
+- `bnp_na_lib/__init__.py` and the `UPDATED_SCRIPTS_LIST.md` header, which V13.21 had left at V13.20, now read V13.22.
+
 ## V13.21
 
 - Redesigned the GUI in the shared AZBMOST look, the same one the launcher, RE_Helix and Curve_It now use. The look lives in `bnp_na_lib/azbmost_ui.py` (theme and window parts) and `bnp_na_lib/azbmost_icons.py` (icons drawn as vector art), identical copies of the files shipped with the other modules.
