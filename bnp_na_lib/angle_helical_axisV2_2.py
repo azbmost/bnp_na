@@ -1290,19 +1290,29 @@ def _set_optional_window_icon(window, tk_module) -> None:
 def launch_gui(parent=None, log_callback=None) -> None:
     try:
         import tkinter as tk
-        from tkinter import filedialog, messagebox
-        from tkinter.scrolledtext import ScrolledText
+        from tkinter import filedialog, messagebox, ttk
     except Exception as e:
         print("Tkinter is not available; cannot start GUI.")
         print(str(e))
         sys.exit(1)
+    try:
+        from bnp_na_lib import azbmost_ui as ui
+    except ImportError:
+        import azbmost_ui as ui
 
     owns_mainloop = parent is None
     root = tk.Tk() if owns_mainloop else tk.Toplevel(parent)
     _set_optional_window_icon(root, tk)
     root.title("angle_helical_axisV2_2.py")
-    root.geometry("900x800")
-    root.minsize(760, 620)
+    root.geometry("1160x860")
+    root.minsize(1060, 800)
+    if owns_mainloop or not ui.is_themed(root):
+        ui.tool_window(root, "Measure angle around axis", tool="measure_angle")
+    else:
+        # Opened inside a themed module window (BNP_NA): the theme is already
+        # active, and its <Map> hook styles this Toplevel once it is mapped.
+        ui.ToolHeader(root, "Measure angle around axis", tool="measure_angle").pack(side="top", fill="x")
+        ui.hairline(root).pack(side="top", fill="x")
 
     # Variables
     var_pdb = tk.StringVar(value="")
@@ -1571,111 +1581,142 @@ def launch_gui(parent=None, log_callback=None) -> None:
             except Exception:
                 pass
 
-    frm = tk.Frame(root, padx=10, pady=10)
+    footer = ui.Footer(root)
+    footer.pack(side="bottom", fill="x")
+    ui.hairline(root).pack(side="bottom", fill="x")
+    frm = ttk.Frame(root, padding=(18, 14, 18, 14))
     frm.pack(fill="both", expand=True)
+    footer.lift()  # stacking order is Tab order: the fields first, then Run
 
     # Row helpers
-    def add_entry_row(row: int, label: str, var: tk.StringVar, browse_cmd=None, width: int = 55):
-        tk.Label(frm, text=label, anchor="w").grid(row=row, column=0, sticky="w")
-        ent = tk.Entry(frm, textvariable=var, width=width)
-        ent.grid(row=row, column=1, sticky="we", padx=(5, 5))
+    def field_label(parent, row: int, label: str):
+        lbl = ttk.Label(parent, text=label, style="Field.TLabel")
+        lbl.grid(row=row, column=0, sticky="w", padx=(0, 12), pady=4)
+        return lbl
+
+    def add_entry_row(parent, row: int, label: str, var: tk.StringVar, browse_cmd=None, width: int = 55):
+        field_label(parent, row, label)
+        ent = ui.Entry(parent, textvariable=var, width=width)
+        ent.grid(row=row, column=1, sticky="we", pady=4)
         if browse_cmd is not None:
-            tk.Button(frm, text="Browse", command=browse_cmd).grid(row=row, column=2, padx=(0, 5))
+            ui.Button(parent, text="Browse", command=browse_cmd).grid(row=row, column=2, sticky="we", padx=(8, 0), pady=4)
         return ent
 
+    def add_triplet(parent, row: int, label: str, variables, widths) -> None:
+        field_label(parent, row, label)
+        box = ttk.Frame(parent)
+        box.grid(row=row, column=1, sticky="w", pady=4)
+        for idx, (var, width) in enumerate(zip(variables, widths)):
+            ui.Entry(box, textvariable=var, width=width).pack(side="left", padx=(0 if idx == 0 else 6, 0))
+
+    def align_label_columns(*containers) -> None:
+        """One label width for a card and its sub-rows, so their fields line up."""
+        widest = 0
+        for container in containers:
+            for child in container.grid_slaves(column=0):
+                if child.winfo_class() == "TLabel":
+                    widest = max(widest, child.winfo_reqwidth())
+        for container in containers:
+            container.columnconfigure(0, minsize=widest + 12)
+
+    frm.columnconfigure(0, weight=1)
+
     # PDB file row
-    add_entry_row(0, "PDB file (optional if using custom axis + XYZ points)", var_pdb, browse_pdb)
+    top = ttk.Frame(frm)
+    top.grid(row=0, column=0, sticky="we")
+    top.columnconfigure(1, weight=1)
+    add_entry_row(top, 0, "PDB file (optional if using custom axis + XYZ points)", var_pdb, browse_pdb)
+
+    cards = ttk.Frame(frm)
+    cards.grid(row=1, column=0, sticky="we", pady=(12, 14))
+    cards.columnconfigure(0, weight=1, uniform="cards")
+    cards.columnconfigure(1, weight=1, uniform="cards")
+    left = ttk.Frame(cards)
+    left.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+    left.columnconfigure(0, weight=1)
+    right = ttk.Frame(cards)
+    right.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+    right.columnconfigure(0, weight=1)
+
+    # Axis --------------------------------------------------------------------
+    card_axis = ui.Card(left, "Axis")
+    card_axis.grid(row=0, column=0, sticky="we", pady=(0, 12))
+    card_axis.columnconfigure(1, weight=1)
 
     # Axis source row
-    tk.Label(frm, text="Axis source", anchor="w").grid(row=1, column=0, sticky="w")
-    opt_axis = tk.OptionMenu(frm, var_axis_source, "Fit from PDB", "Custom axis")
-    opt_axis.grid(row=1, column=1, sticky="w", padx=(5, 5))
+    field_label(card_axis, 0, "Axis source")
+    opt_axis = ui.OptionMenu(card_axis, var_axis_source, "Fit from PDB", "Custom axis")
+    opt_axis.configure(width=13)
+    opt_axis.grid(row=0, column=1, sticky="w", pady=4)
 
     # Axis atoms row (PDB fit)
-    tk.Label(frm, text="Axis atoms (PDB fit only)", anchor="w").grid(row=2, column=0, sticky="w")
-    ent_axis_atoms = tk.Entry(frm, textvariable=var_axis_atoms, width=20)
-    ent_axis_atoms.grid(row=2, column=1, sticky="w", padx=(5, 5))
+    field_label(card_axis, 1, "Axis atoms (PDB fit only)")
+    ent_axis_atoms = ui.Entry(card_axis, textvariable=var_axis_atoms, width=20)
+    ent_axis_atoms.grid(row=1, column=1, sticky="w", pady=4)
 
     # Axis residue-range row (PDB fit)
-    tk.Label(frm, text="Axis residue ranges (PDB fit only)", anchor="w").grid(
-        row=3, column=0, sticky="w"
-    )
-    ent_axis_range = tk.Entry(frm, textvariable=var_axis_range, width=32)
-    ent_axis_range.grid(row=3, column=1, sticky="w", padx=(5, 5))
+    field_label(card_axis, 2, "Axis residue ranges (PDB fit only)")
+    ent_axis_range = ui.Entry(card_axis, textvariable=var_axis_range, width=24)
+    ent_axis_range.grid(row=2, column=1, sticky="we", pady=4)
 
     # Custom axis frame
-    frm_custom = tk.Frame(frm)
-    frm_custom.grid(row=4, column=0, columnspan=3, sticky="we", pady=(2, 2))
+    frm_custom = ttk.Frame(card_axis)
+    frm_custom.grid(row=3, column=0, columnspan=2, sticky="we")
+    add_triplet(frm_custom, 0, "Custom axis point (x y z)", (var_axis_px, var_axis_py, var_axis_pz), (8, 8, 8))
+    add_triplet(frm_custom, 1, "Custom axis vector (vx vy vz)", (var_axis_vx, var_axis_vy, var_axis_vz), (8, 8, 8))
 
-    tk.Label(frm_custom, text="Custom axis point (x y z)").grid(row=0, column=0, sticky="w")
-    tk.Entry(frm_custom, textvariable=var_axis_px, width=8).grid(row=0, column=1, padx=(5, 2))
-    tk.Entry(frm_custom, textvariable=var_axis_py, width=8).grid(row=0, column=2, padx=(2, 2))
-    tk.Entry(frm_custom, textvariable=var_axis_pz, width=8).grid(row=0, column=3, padx=(2, 2))
-
-    tk.Label(frm_custom, text="Custom axis vector (vx vy vz)").grid(row=1, column=0, sticky="w")
-    tk.Entry(frm_custom, textvariable=var_axis_vx, width=8).grid(row=1, column=1, padx=(5, 2))
-    tk.Entry(frm_custom, textvariable=var_axis_vy, width=8).grid(row=1, column=2, padx=(2, 2))
-    tk.Entry(frm_custom, textvariable=var_axis_vz, width=8).grid(row=1, column=3, padx=(2, 2))
+    # Points ------------------------------------------------------------------
+    card_points = ui.Card(left, "Points")
+    card_points.grid(row=1, column=0, sticky="we")
+    card_points.columnconfigure(1, weight=1)
 
     # Point 1 controls
-    tk.Label(frm, text="Point 1 type", anchor="w").grid(row=5, column=0, sticky="w")
-    tk.OptionMenu(frm, var_p1_mode, "Atom", "XYZ").grid(row=5, column=1, sticky="w", padx=(5, 5))
+    field_label(card_points, 0, "Point 1 type")
+    opt_p1 = ui.OptionMenu(card_points, var_p1_mode, "Atom", "XYZ")
+    opt_p1.configure(width=6)
+    opt_p1.grid(row=0, column=1, sticky="w", pady=4)
 
-    frm_p1_atom = tk.Frame(frm)
-    frm_p1_xyz = tk.Frame(frm)
-    frm_p1_atom.grid(row=6, column=0, columnspan=3, sticky="we")
-    frm_p1_xyz.grid(row=6, column=0, columnspan=3, sticky="we")
-
-    tk.Label(frm_p1_atom, text="Point 1 atom (chain, resSeq, atom)").grid(row=0, column=0, sticky="w")
-    tk.Entry(frm_p1_atom, textvariable=var_p1_chain, width=5).grid(row=0, column=1, padx=(5, 2))
-    tk.Entry(frm_p1_atom, textvariable=var_p1_resseq, width=8).grid(row=0, column=2, padx=(2, 2))
-    tk.Entry(frm_p1_atom, textvariable=var_p1_atom, width=10).grid(row=0, column=3, padx=(2, 2))
-
-    tk.Label(frm_p1_xyz, text="Point 1 xyz (x y z)").grid(row=0, column=0, sticky="w")
-    tk.Entry(frm_p1_xyz, textvariable=var_p1_x, width=8).grid(row=0, column=1, padx=(5, 2))
-    tk.Entry(frm_p1_xyz, textvariable=var_p1_y, width=8).grid(row=0, column=2, padx=(2, 2))
-    tk.Entry(frm_p1_xyz, textvariable=var_p1_z, width=8).grid(row=0, column=3, padx=(2, 2))
+    frm_p1_atom = ttk.Frame(card_points)
+    frm_p1_xyz = ttk.Frame(card_points)
+    frm_p1_atom.grid(row=1, column=0, columnspan=2, sticky="we")
+    frm_p1_xyz.grid(row=1, column=0, columnspan=2, sticky="we")
+    add_triplet(frm_p1_atom, 0, "Point 1 atom (chain, resSeq, atom)", (var_p1_chain, var_p1_resseq, var_p1_atom), (5, 8, 10))
+    add_triplet(frm_p1_xyz, 0, "Point 1 xyz (x y z)", (var_p1_x, var_p1_y, var_p1_z), (8, 8, 8))
 
     # Point 2 controls
-    tk.Label(frm, text="Point 2 type", anchor="w").grid(row=7, column=0, sticky="w")
-    tk.OptionMenu(frm, var_p2_mode, "Atom", "XYZ").grid(row=7, column=1, sticky="w", padx=(5, 5))
+    field_label(card_points, 2, "Point 2 type")
+    opt_p2 = ui.OptionMenu(card_points, var_p2_mode, "Atom", "XYZ")
+    opt_p2.configure(width=6)
+    opt_p2.grid(row=2, column=1, sticky="w", pady=4)
 
-    frm_p2_atom = tk.Frame(frm)
-    frm_p2_xyz = tk.Frame(frm)
-    frm_p2_atom.grid(row=8, column=0, columnspan=3, sticky="we")
-    frm_p2_xyz.grid(row=8, column=0, columnspan=3, sticky="we")
+    frm_p2_atom = ttk.Frame(card_points)
+    frm_p2_xyz = ttk.Frame(card_points)
+    frm_p2_atom.grid(row=3, column=0, columnspan=2, sticky="we")
+    frm_p2_xyz.grid(row=3, column=0, columnspan=2, sticky="we")
+    add_triplet(frm_p2_atom, 0, "Point 2 atom (chain, resSeq, atom)", (var_p2_chain, var_p2_resseq, var_p2_atom), (5, 8, 10))
+    add_triplet(frm_p2_xyz, 0, "Point 2 xyz (x y z)", (var_p2_x, var_p2_y, var_p2_z), (8, 8, 8))
+    align_label_columns(card_axis, frm_custom, card_points, frm_p1_atom, frm_p1_xyz, frm_p2_atom, frm_p2_xyz)
 
-    tk.Label(frm_p2_atom, text="Point 2 atom (chain, resSeq, atom)").grid(row=0, column=0, sticky="w")
-    tk.Entry(frm_p2_atom, textvariable=var_p2_chain, width=5).grid(row=0, column=1, padx=(5, 2))
-    tk.Entry(frm_p2_atom, textvariable=var_p2_resseq, width=8).grid(row=0, column=2, padx=(2, 2))
-    tk.Entry(frm_p2_atom, textvariable=var_p2_atom, width=10).grid(row=0, column=3, padx=(2, 2))
+    # Optional 2-fold symmetry-axis controls ------------------------------------
+    card_sym = ui.Card(right, "2-fold symmetry axis")
+    card_sym.grid(row=0, column=0, sticky="we", pady=(0, 12))
+    card_sym.columnconfigure(1, weight=1)
 
-    tk.Label(frm_p2_xyz, text="Point 2 xyz (x y z)").grid(row=0, column=0, sticky="w")
-    tk.Entry(frm_p2_xyz, textvariable=var_p2_x, width=8).grid(row=0, column=1, padx=(5, 2))
-    tk.Entry(frm_p2_xyz, textvariable=var_p2_y, width=8).grid(row=0, column=2, padx=(2, 2))
-    tk.Entry(frm_p2_xyz, textvariable=var_p2_z, width=8).grid(row=0, column=3, padx=(2, 2))
+    field_label(card_sym, 0, "2-fold symmetry output")
+    frm_sym_toggle = ui.Segmented(card_sym, var_sym_enabled, ["Off", "On"])
+    frm_sym_toggle.grid(row=0, column=1, sticky="w", pady=4)
 
-    # Optional 2-fold symmetry-axis controls
-    tk.Label(frm, text="2-fold symmetry output", anchor="w").grid(row=9, column=0, sticky="w")
-    frm_sym_toggle = tk.Frame(frm)
-    frm_sym_toggle.grid(row=9, column=1, sticky="w", padx=(5, 5))
-    tk.Radiobutton(frm_sym_toggle, text="Off", variable=var_sym_enabled, value="Off").grid(row=0, column=0, sticky="w")
-    tk.Radiobutton(frm_sym_toggle, text="On", variable=var_sym_enabled, value="On").grid(row=0, column=1, sticky="w", padx=(12, 0))
+    lbl_sym_regions = field_label(card_sym, 1, "2-fold symmetry regions")
+    ent_sym_regions = ui.Entry(card_sym, textvariable=var_sym_regions, width=24)
+    ent_sym_regions.grid(row=1, column=1, sticky="we", pady=4)
 
-    lbl_sym_regions = tk.Label(frm, text="2-fold symmetry regions", anchor="w")
-    lbl_sym_regions.grid(row=10, column=0, sticky="w")
-    ent_sym_regions = tk.Entry(frm, textvariable=var_sym_regions, width=32)
-    ent_sym_regions.grid(row=10, column=1, sticky="w", padx=(5, 5))
+    lbl_sym_atoms = field_label(card_sym, 2, "2-fold symmetry atoms")
+    ent_sym_atoms = ui.Entry(card_sym, textvariable=var_sym_atoms, width=20)
+    ent_sym_atoms.grid(row=2, column=1, sticky="w", pady=4)
 
-    lbl_sym_atoms = tk.Label(frm, text="2-fold symmetry atoms", anchor="w")
-    lbl_sym_atoms.grid(row=11, column=0, sticky="w")
-    ent_sym_atoms = tk.Entry(frm, textvariable=var_sym_atoms, width=20)
-    ent_sym_atoms.grid(row=11, column=1, sticky="w", padx=(5, 5))
-
-    lbl_sym_radius = tk.Label(frm, text="2-fold point radius (A)", anchor="w")
-    lbl_sym_radius.grid(row=12, column=0, sticky="w")
-    ent_sym_radius = tk.Entry(frm, textvariable=var_sym_radius, width=10)
-    ent_sym_radius.grid(row=12, column=1, sticky="w", padx=(5, 5))
+    lbl_sym_radius = field_label(card_sym, 3, "2-fold point radius (A)")
+    ent_sym_radius = ui.Entry(card_sym, textvariable=var_sym_radius, width=10)
+    ent_sym_radius.grid(row=3, column=1, sticky="w", pady=4)
     sym_dependent_widgets = [
         lbl_sym_regions,
         ent_sym_regions,
@@ -1685,30 +1726,36 @@ def launch_gui(parent=None, log_callback=None) -> None:
         ent_sym_radius,
     ]
 
+    # Output, axis drawing margin and radii ----------------------------------------
+    card_bild = ui.Card(right, "BILD drawing")
+    card_bild.grid(row=1, column=0, sticky="we")
+    card_bild.columnconfigure(1, weight=1)
+
     # Output
-    add_entry_row(13, "Output .bild", var_out, browse_out)
+    add_entry_row(card_bild, 0, "Output .bild", var_out, browse_out, width=24)
 
     # Axis drawing margin and radii
-    tk.Label(frm, text="Axis drawing margin", anchor="w").grid(row=14, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_axis_margin, width=10).grid(row=14, column=1, sticky="w", padx=(5, 5))
+    field_label(card_bild, 1, "Axis drawing margin")
+    ui.Entry(card_bild, textvariable=var_axis_margin, width=10).grid(row=1, column=1, sticky="w", pady=4)
 
-    tk.Label(frm, text="Axis radius", anchor="w").grid(row=15, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_axis_r, width=10).grid(row=15, column=1, sticky="w", padx=(5, 5))
+    field_label(card_bild, 2, "Axis radius")
+    ui.Entry(card_bild, textvariable=var_axis_r, width=10).grid(row=2, column=1, sticky="w", pady=4)
 
-    tk.Label(frm, text="Vector radius", anchor="w").grid(row=16, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_vec_r, width=10).grid(row=16, column=1, sticky="w", padx=(5, 5))
+    field_label(card_bild, 3, "Vector radius")
+    ui.Entry(card_bild, textvariable=var_vec_r, width=10).grid(row=3, column=1, sticky="w", pady=4)
 
-    tk.Label(frm, text="Sphere radius", anchor="w").grid(row=17, column=0, sticky="w")
-    tk.Entry(frm, textvariable=var_sph_r, width=10).grid(row=17, column=1, sticky="w", padx=(5, 5))
+    field_label(card_bild, 4, "Sphere radius")
+    ui.Entry(card_bild, textvariable=var_sph_r, width=10).grid(row=4, column=1, sticky="w", pady=4)
+    align_label_columns(card_sym, card_bild)
 
-    tk.Button(frm, text="Run", command=do_run).grid(row=18, column=0, pady=(8, 8), sticky="w")
+    footer.add_button("Run", do_run, primary=True)
 
     # Output text
-    text = ScrolledText(frm, height=18, width=90)
-    text.grid(row=19, column=0, columnspan=3, sticky="nsew", pady=(5, 0))
+    text_view = ui.LogView(frm, wrap="word", height=10)
+    text_view.grid(row=2, column=0, sticky="nsew")
+    text = text_view.text
 
-    frm.columnconfigure(1, weight=1)
-    frm.rowconfigure(19, weight=1)
+    frm.rowconfigure(2, weight=1)
 
     def refresh_visibility(*_args) -> None:
         # Axis controls

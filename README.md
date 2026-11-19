@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, and Z-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z structure building, and triplex conversion.
 
-The current app version is `V13.20`.
+The current app version is `V13.21`.
 
 ## What It Does
 
@@ -684,7 +684,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.20 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.21 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA
@@ -713,7 +713,7 @@ python3 bnp_na_lib/pdb_inv_rotV2.py model.pdb ix
 
 The bundled filename is `angle_helical_axisV2_2.py` to indicate the V2.2 script update. Earlier public versions used `angle_helical_axisV2.py` and `angle_helical_axisV2_1.py`. V2.2 adds optional region-based 2-fold symmetry-axis reporting while keeping the V2.1 radial-angle workflow.
 
-In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
+In the main `bnp_na` GUI, use the `Other tools` list in the right-hand panel, above `Log output`, and click:
 
 ```text
 Measure angle around axis
@@ -912,7 +912,7 @@ The tool appends the equivalent `bnp_na_lib/align2z.py` CLI command and alignmen
 
 `bnp_na` V13.8 includes `bnp_na_lib/helical_axis_info.py`, a DSSR-based tool for reporting the helical axis formed by two selected chains in a larger PDB file. The tool filters the input PDB down to the requested chain IDs, runs `x3dna-dssr --more`, and parses DSSR's first `point-one` and `point-two` axis endpoints.
 
-In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
+In the main `bnp_na` GUI, use the `Other tools` list in the right-hand panel, above `Log output`, and click:
 
 ```text
 Get helical-axis info
@@ -1035,7 +1035,7 @@ python3 bnp_na_lib/add_phosphates.py model.pdb \
 - A yellow Y-axis arrow.
 - A blue Z-axis arrow.
 
-In the main `bnp_na` GUI, use the `Other tools` section near the bottom, immediately above `Log output`, and click:
+In the main `bnp_na` GUI, use the `Other tools` list in the right-hand panel, above `Log output`, and click:
 
 ```text
 Write XYZ axes BILD

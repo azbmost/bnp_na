@@ -2040,11 +2040,15 @@ def launch_gui() -> None:
 
     try:
         import tkinter as tk
-        from tkinter import filedialog, messagebox, scrolledtext
+        from tkinter import filedialog, messagebox, ttk
     except Exception as exc:
         print(f"ERROR: GUI mode requires tkinter, but it could not be imported: {exc}")
         print("Use CLI mode instead, e.g.: python make_BZV2_3.py --axis-mode codirectional --out multi_BZ.pdb B1.pdb Z1.pdb")
         return
+    try:
+        from . import azbmost_ui as ui
+    except ImportError:
+        import azbmost_ui as ui
 
     try:
         root = tk.Tk()
@@ -2062,6 +2066,7 @@ def launch_gui() -> None:
             pass
 
     root.title("make_BZ - B/Z junction builder")
+    ui.tool_window(root, "B-Z builder", tool="bz_builder")
 
     dna_files_var = tk.StringVar()
     out_var = tk.StringVar(value=DEFAULT_OUTPUT_NAME)
@@ -2070,15 +2075,21 @@ def launch_gui() -> None:
     auto_trim_var = tk.BooleanVar(value=True)
     axis_source_var = tk.StringVar(value="auto")
 
-    frm = tk.Frame(root, padx=10, pady=10)
-    frm.grid(row=0, column=0, sticky="nsew")
-    root.columnconfigure(0, weight=1)
-    root.rowconfigure(0, weight=1)
+    footer = ui.Footer(root)
+    footer.pack(side="bottom", fill="x")
+    ui.hairline(root).pack(side="bottom", fill="x")
+    frm = ttk.Frame(root, padding=(18, 14, 18, 14))
+    frm.pack(fill="both", expand=True)
+    footer.lift()  # stacking order is Tab order: the fields first, then Run
     frm.columnconfigure(1, weight=1)
 
-    tk.Label(frm, text="DNA input files (must alternate B, Z, B, Z...):").grid(row=0, column=0, columnspan=3, sticky="w")
-    files_text = scrolledtext.ScrolledText(frm, width=80, height=7)
-    files_text.grid(row=1, column=0, columnspan=3, sticky="nsew", pady=(2, 8))
+    ttk.Label(frm, text="DNA input files (must alternate B, Z, B, Z...):", style="Field.TLabel").grid(
+        row=0, column=0, columnspan=3, sticky="w", pady=(0, 6)
+    )
+    files_view = ui.LogView(frm, wrap="char", height=6)
+    files_view.grid(row=1, column=0, columnspan=3, sticky="nsew")
+    files_text = files_view.text
+    files_text.configure(width=80, background=ui.C.BG)
     frm.rowconfigure(1, weight=1)
 
     def _input_default_dir() -> str:
@@ -2115,12 +2126,14 @@ def launch_gui() -> None:
     def clear_files() -> None:
         files_text.delete("1.0", "end")
 
-    tk.Button(frm, text="Add input files...", command=add_files).grid(row=2, column=0, sticky="w")
-    tk.Button(frm, text="Clear", command=clear_files).grid(row=2, column=1, sticky="w")
+    file_buttons = ttk.Frame(frm)
+    file_buttons.grid(row=2, column=0, columnspan=3, sticky="w", pady=(8, 12))
+    ui.Button(file_buttons, text="Add input files...", command=add_files).pack(side="left", padx=(0, 8))
+    ui.Button(file_buttons, text="Clear", command=clear_files).pack(side="left")
 
-    tk.Label(frm, text="Output PDB:").grid(row=3, column=0, sticky="w", pady=(8, 2))
-    out_entry = tk.Entry(frm, textvariable=out_var, width=60)
-    out_entry.grid(row=3, column=1, sticky="ew", pady=(8, 2))
+    ttk.Label(frm, text="Output PDB:", style="Field.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 14), pady=4)
+    out_entry = ui.Entry(frm, textvariable=out_var, width=60)
+    out_entry.grid(row=3, column=1, sticky="ew", pady=4)
 
     def choose_out() -> None:
         current_out = Path(out_var.get().strip() or DEFAULT_OUTPUT_NAME)
@@ -2137,18 +2150,20 @@ def launch_gui() -> None:
             out_default_mode["value"] = False
             out_var.set(selected)
 
-    tk.Button(frm, text="Browse...", command=choose_out).grid(row=3, column=2, sticky="e", pady=(8, 2))
+    ui.Button(frm, text="Browse...", command=choose_out).grid(row=3, column=2, sticky="ew", padx=(8, 0), pady=4)
 
-    tk.Label(frm, text="Axis correction mode:").grid(row=4, column=0, sticky="w")
-    tk.Radiobutton(
+    ttk.Label(frm, text="Axis correction mode:", style="Field.TLabel").grid(
+        row=4, column=0, sticky="nw", padx=(0, 14), pady=(6, 0)
+    )
+    ui.Radiobutton(
         frm,
         text="Co-directional only (default: direction only, no lateral shift)",
         variable=axis_mode_var,
         value="codirectional",
         wraplength=760,
         justify="left",
-    ).grid(row=4, column=1, columnspan=2, sticky="w")
-    tk.Radiobutton(
+    ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(6, 0))
+    ui.Radiobutton(
         frm,
         text="True collinear (optional strict mode: direction + lateral shift so fitted axis lines coincide)",
         variable=axis_mode_var,
@@ -2156,34 +2171,44 @@ def launch_gui() -> None:
         wraplength=760,
         justify="left",
     ).grid(row=5, column=1, columnspan=2, sticky="w")
-    tk.Radiobutton(
+    ui.Radiobutton(
         frm,
         text="None (no post-fit axis correction)",
         variable=axis_mode_var,
         value="none",
         wraplength=760,
         justify="left",
-    ).grid(row=6, column=1, columnspan=2, sticky="w")
+    ).grid(row=6, column=1, columnspan=2, sticky="w", pady=(0, 6))
 
-    tk.Label(frm, text="Axis source:").grid(row=7, column=0, sticky="w")
-    tk.OptionMenu(frm, axis_source_var, "auto", "dssr", "pca").grid(row=7, column=1, sticky="w")
-    tk.Label(
-        frm,
+    ttk.Label(frm, text="Axis source:", style="Field.TLabel").grid(row=7, column=0, sticky="w", padx=(0, 14), pady=4)
+    axis_source_row = ttk.Frame(frm)
+    axis_source_row.grid(row=7, column=1, columnspan=2, sticky="w", pady=4)
+    axis_source_menu = ui.OptionMenu(axis_source_row, axis_source_var, "auto", "dssr", "pca")
+    axis_source_menu.configure(width=6)
+    axis_source_menu.pack(side="left")
+    ttk.Label(
+        axis_source_row,
         text="auto = import align2z.py and use DSSR --more when available; fallback to C1' PCA",
         justify="left",
         wraplength=620,
-    ).grid(row=7, column=1, columnspan=2, sticky="w", padx=(90, 0))
+        style="Hint.TLabel",
+    ).pack(side="left", padx=(12, 0))
 
-    tk.Checkbutton(
+    # ttk check buttons wrap their text through the style.
+    ttk.Style(root).configure("Wrap.TCheckbutton", wraplength=760)
+    ui.Checkbutton(
         frm,
         text="Auto-trim terminal Z-DNA bp if needed (required for DSSR/bnp_na-generated Z-DNA; input should be 2 bp longer than the target final Z segment)",
         variable=auto_trim_var,
         wraplength=760,
         justify="left",
-    ).grid(row=8, column=0, columnspan=3, sticky="w")
+        style="Wrap.TCheckbutton",
+    ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
-    log = scrolledtext.ScrolledText(frm, width=90, height=16)
-    log.grid(row=10, column=0, columnspan=3, sticky="nsew", pady=(10, 0))
+    log_view = ui.LogView(frm, wrap="char", height=10)
+    log_view.grid(row=10, column=0, columnspan=3, sticky="nsew", pady=(12, 0))
+    log = log_view.text
+    log.configure(width=90)
     frm.rowconfigure(10, weight=2)
 
     def log_write(text: str) -> None:
@@ -2233,7 +2258,7 @@ def launch_gui() -> None:
             log_write(f"\nERROR: {exc}\n")
             messagebox.showerror("make_BZ", str(exc))
 
-    tk.Button(frm, text="Run make_BZ", command=run_from_gui).grid(row=9, column=0, sticky="w", pady=(10, 0))
+    footer.add_button("Run make_BZ", run_from_gui, primary=True)
 
     help_text = (
         "Tip: add files in the exact order B1, Z1, B2, Z2...\n"
@@ -2242,7 +2267,9 @@ def launch_gui() -> None:
         "Z-DNA requirement: each selected Z chain should start with C/T/U and end with A/G. "
         "The auto-trim option removes at most 1 bp from each Z end to satisfy this requirement. For DSSR/bnp_na-generated Z inputs, prepare the original Z-DNA 2 bp longer than the target final Z segment."
     )
-    tk.Label(frm, text=help_text, justify="left", wraplength=760).grid(row=9, column=1, columnspan=2, sticky="w", pady=(10, 0))
+    ttk.Label(frm, text=help_text, justify="left", wraplength=760, style="Hint.TLabel").grid(
+        row=9, column=0, columnspan=3, sticky="w", pady=(12, 0)
+    )
 
     root.mainloop()
 

@@ -2,6 +2,14 @@
 
 This file records the public GitHub-ready `bnp_na` version history from the repository preparation work onward.
 
+## V13.21
+
+- Redesigned the GUI in the shared AZBMOST look, the same one the launcher, RE_Helix and Curve_It now use. The look lives in `bnp_na_lib/azbmost_ui.py` (theme and window parts) and `bnp_na_lib/azbmost_icons.py` (icons drawn as vector art), identical copies of the files shipped with the other modules.
+- The main window has a header with the BNP_NA icon, version, purpose and the x3dna-dssr status; the build form in cards on the left (Helix, Current DSSR helical parameters, phenix.geometry_minimization, Mirror-image L-form chirality, Placement / Orientation, and the pipeline summary); the builders and `Other tools` as a list with an icon, a one-line purpose and a round `?` per tool, with `Log output` beneath it, on the right; and `Quit` and `Generate` in a footer. The nucleic acid type is a segmented control over the same four choices.
+- Every dialog opened from the window (Align helix to z, Get helical-axis info, Combine_PDB, Regularize phosphates, Add phosphates, Write XYZ axes BILD, B-Z builder, Triplex converter, Customize DSSR parameters with its X-disp finder, and the help windows) and the Measure angle around axis tool have a tool header, cards, and their buttons in a footer with the main action on the right. The standalone windows of `convert_to_triplex_pdbV2_1.py` and `make_BZV2_3.py` match.
+- Redrew the BNP_NA icon in the new AZBMOST icon family: a right-handed B-DNA double helix with a +Z cue.
+- Only the look changed. Every field, option, default, help text, button and command is as before, and builds, file names, REMARKs (apart from the version) and logs are unchanged.
+
 ## V13.20
 
 - `bnp_na_lib` modules now reach their siblings through the package, so the library can be imported from outside its own folder. A project that puts the repository root on `sys.path` can now do `from bnp_na_lib.build_bdna import build_bdna`.

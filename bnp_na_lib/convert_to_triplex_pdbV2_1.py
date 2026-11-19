@@ -935,6 +935,10 @@ def run_gui() -> None:
         raise RuntimeError(
             "GUI mode requested, but tkinter is not available in this Python environment."
         ) from exc
+    try:
+        from . import azbmost_ui as ui
+    except ImportError:
+        import azbmost_ui as ui
 
     root = tk.Tk()
     icon_path = Path(__file__).resolve().parents[1] / "assets" / "bnp_na_icon.png"
@@ -945,8 +949,9 @@ def run_gui() -> None:
         except Exception:
             pass
     root.title("convert_to_triplex_pdbV2_1")
-    root.geometry("1000x760")
-    root.minsize(940, 680)
+    root.geometry("1000x840")
+    root.minsize(940, 760)
+    ui.tool_window(root, "Triplex converter", tool="triplex")
 
     duplex_var = tk.StringVar()
     out_var = tk.StringVar(value="")
@@ -959,8 +964,12 @@ def run_gui() -> None:
     strand_iii_start_var = tk.StringVar(value="1")
     last_auto_output = {"path": ""}
 
-    main = ttk.Frame(root, padding=14)
+    footer = ui.Footer(root)
+    footer.pack(side="bottom", fill="x")
+    ui.hairline(root).pack(side="bottom", fill="x")
+    main = ttk.Frame(root, padding=(18, 14, 18, 14))
     main.pack(fill="both", expand=True)
+    footer.lift()  # stacking order is Tab order: the fields first, then the buttons
     main.columnconfigure(0, weight=0)
     main.columnconfigure(1, weight=1)
     main.columnconfigure(2, weight=0)
@@ -1042,7 +1051,8 @@ def run_gui() -> None:
         if selected:
             out_var.set(selected)
 
-    ttk.Label(main, text="Input duplex PDB").grid(row=0, column=0, sticky="w", pady=4)
+    label_pad = (0, 14)
+    ttk.Label(main, text="Input duplex PDB", style="Field.TLabel").grid(row=0, column=0, sticky="w", padx=label_pad, pady=4)
     input_entry = ttk.Entry(main, textvariable=duplex_var, width=82)
     input_entry.grid(row=0, column=1, sticky="ew", pady=4)
     input_entry.bind("<Return>", load_sequence_info)
@@ -1051,31 +1061,35 @@ def run_gui() -> None:
         row=0, column=2, sticky="ew", padx=(8, 0), pady=4
     )
 
-    ttk.Label(main, text="Output PDB").grid(row=1, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Output PDB", style="Field.TLabel").grid(row=1, column=0, sticky="w", padx=label_pad, pady=4)
     ttk.Entry(main, textvariable=out_var, width=82).grid(row=1, column=1, sticky="ew", pady=4)
     ttk.Button(main, text="Browse", command=choose_output).grid(
         row=1, column=2, sticky="ew", padx=(8, 0), pady=4
     )
 
-    ttk.Label(main, text="Strand I (purine chain)").grid(row=2, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Strand I (purine chain)", style="Field.TLabel").grid(
+        row=2, column=0, sticky="w", padx=label_pad, pady=(10, 4)
+    )
     strand_i_entry = ttk.Entry(main, textvariable=strand_i_var, width=12)
-    strand_i_entry.grid(row=2, column=1, sticky="w", pady=4)
+    strand_i_entry.grid(row=2, column=1, sticky="w", pady=(10, 4))
     strand_i_entry.bind("<Return>", load_sequence_info)
     strand_i_entry.bind("<FocusOut>", load_sequence_info)
 
-    ttk.Label(main, text="Residue range on strand I").grid(row=3, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Residue range on strand I", style="Field.TLabel").grid(
+        row=3, column=0, sticky="w", padx=label_pad, pady=4
+    )
     range_box = ttk.Frame(main)
-    range_box.grid(row=3, column=1, sticky="w")
+    range_box.grid(row=3, column=1, sticky="w", pady=4)
     start_entry = ttk.Entry(range_box, textvariable=range_start_var, width=10)
     start_entry.pack(side="left")
-    ttk.Label(range_box, text=" to ").pack(side="left")
+    ttk.Label(range_box, text=" to ", style="Field.TLabel").pack(side="left", padx=4)
     end_entry = ttk.Entry(range_box, textvariable=range_end_var, width=10)
     end_entry.pack(side="left")
     for entry in (start_entry, end_entry):
         entry.bind("<Return>", load_sequence_info)
         entry.bind("<FocusOut>", load_sequence_info)
 
-    ttk.Label(main, text="Triplex mode").grid(row=4, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Triplex mode", style="Field.TLabel").grid(row=4, column=0, sticky="w", padx=label_pad, pady=4)
     mode_box = ttk.Combobox(
         main,
         textvariable=mode_var,
@@ -1086,13 +1100,19 @@ def run_gui() -> None:
     mode_box.grid(row=4, column=1, sticky="w", pady=4)
     mode_box.bind("<<ComboboxSelected>>", load_sequence_info)
 
-    ttk.Label(main, text="Strand II chain (optional)").grid(row=5, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Strand II chain (optional)", style="Field.TLabel").grid(
+        row=5, column=0, sticky="w", padx=label_pad, pady=4
+    )
     ttk.Entry(main, textvariable=strand_ii_var, width=12).grid(row=5, column=1, sticky="w", pady=4)
 
-    ttk.Label(main, text="Strand III chain (optional)").grid(row=6, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Strand III chain (optional)", style="Field.TLabel").grid(
+        row=6, column=0, sticky="w", padx=label_pad, pady=4
+    )
     ttk.Entry(main, textvariable=strand_iii_var, width=12).grid(row=6, column=1, sticky="w", pady=4)
 
-    ttk.Label(main, text="Strand III first resSeq").grid(row=7, column=0, sticky="w", pady=4)
+    ttk.Label(main, text="Strand III first resSeq", style="Field.TLabel").grid(
+        row=7, column=0, sticky="w", padx=label_pad, pady=4
+    )
     ttk.Entry(main, textvariable=strand_iii_start_var, width=12).grid(row=7, column=1, sticky="w", pady=4)
 
     explanation = (
@@ -1103,22 +1123,21 @@ def run_gui() -> None:
         "must be G for antiparallel or A for parallel; the rest of strand I may contain other bases. Leave strand II "
         "blank to auto-detect the paired segment, and leave strand III blank to auto-assign an unused chain ID."
     )
-    ttk.Label(main, text=explanation, justify="left", wraplength=930).grid(
-        row=8, column=0, columnspan=3, sticky="ew", pady=(12, 8)
+    explanation_label = ttk.Label(main, text=explanation, justify="left", wraplength=930, style="Hint.TLabel")
+    explanation_label.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(12, 10))
+    main.bind(
+        "<Configure>",
+        lambda event: explanation_label.configure(wraplength=max(300, event.width - 40)),
+        add="+",
     )
 
-    log_label = ttk.Label(main, text="GUI log / strand and sequence information")
-    log_label.grid(row=9, column=0, columnspan=3, sticky="w", pady=(4, 2))
+    log_label = ttk.Label(main, text="GUI log / strand and sequence information", style="Section.TLabel")
+    log_label.grid(row=9, column=0, columnspan=3, sticky="w", pady=(4, 6))
 
-    log_frame = ttk.Frame(main)
-    log_frame.grid(row=11, column=0, columnspan=3, sticky="nsew", pady=(0, 8))
-    log_frame.columnconfigure(0, weight=1)
-    log_frame.rowconfigure(0, weight=1)
-    output_box = tk.Text(log_frame, height=18, width=112, wrap="word")
-    output_box.grid(row=0, column=0, sticky="nsew")
-    yscroll = ttk.Scrollbar(log_frame, orient="vertical", command=output_box.yview)
-    yscroll.grid(row=0, column=1, sticky="ns")
-    output_box.configure(yscrollcommand=yscroll.set)
+    # The shared log view: a themed tk.Text (output_box) with thin scrollbars.
+    log_frame = ui.LogView(main, wrap="word", height=14)
+    log_frame.grid(row=11, column=0, columnspan=3, sticky="nsew")
+    output_box = log_frame.text
 
     def run_from_gui() -> None:
         try:
@@ -1158,11 +1177,9 @@ def run_gui() -> None:
             append_log(f"\nError: {exc}\n")
             messagebox.showerror("Error", str(exc))
 
-    button_row = ttk.Frame(main)
-    button_row.grid(row=12, column=0, columnspan=3, sticky="ew")
-    ttk.Button(button_row, text="Refresh strand/sequence info", command=load_sequence_info).pack(side="left")
-    ttk.Button(button_row, text="Run conversion", command=run_from_gui).pack(side="left", padx=(8, 0))
-    ttk.Button(button_row, text="Quit", command=root.destroy).pack(side="left", padx=(8, 0))
+    footer.add_button("Refresh strand/sequence info", load_sequence_info)
+    footer.add_button("Quit", root.destroy)
+    footer.add_button("Run conversion", run_from_gui, primary=True)
 
     set_log(
         "Choose an input duplex PDB file to list chains and sequences here.\n"
