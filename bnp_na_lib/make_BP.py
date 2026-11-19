@@ -159,8 +159,18 @@ def _pair_keys(struct: Structure, pair) -> Tuple[ResidKey, ResidKey]:
 
 
 def helix_phosphate_radius(struct: Structure) -> float:
-    """Median distance of P atoms from the C1' PCA axis line."""
-    point, direction = struct.axis_line()
+    """Median distance of P atoms from the helix axis.
+
+    The axis is the helix's screw axis, which is exact for a regular helix of any
+    length. The C1' PCA line is used only if the screw cannot be fitted: it lies
+    across very short helices and would put the phosphates of a 3-bp B-DNA about
+    4.7 A from the axis, inside the P-DNA range.
+    """
+    try:
+        line = screw_axis_line(struct)
+        point, direction = line.point, line.direction
+    except (ValueError, np.linalg.LinAlgError):
+        point, direction = struct.axis_line()
     radii = []
     for res in struct.residues.values():
         rec = res.atom_by_name.get("P")

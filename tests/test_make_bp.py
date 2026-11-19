@@ -15,6 +15,7 @@ from bnp_na_lib.build_common import PipelineError
 from bnp_na_lib.build_pdna import build_pdna_model, model_pdb_lines
 from bnp_na_lib.make_BP import (
     detect_helix_type,
+    helix_phosphate_radius,
     load_helix,
     new_core,
     parse_types,
@@ -134,6 +135,26 @@ class BPBuilderTest(unittest.TestCase):
     def test_helix_types_are_detected(self) -> None:
         self.assertEqual(detect_helix_type(load_helix(self.b_pdb, "s1")), "B")
         self.assertEqual(detect_helix_type(load_helix(self.p_pdb, "s2")), "P")
+
+    def test_shortest_helices_are_detected(self) -> None:
+        # 3 bp and 4 levels are the shortest inputs allowed; the C1' PCA axis lies
+        # across a 3-bp B-DNA and used to put its phosphates 4.7 A from the axis.
+        b3 = load_helix(write_model(b_dna_from_core("GCA"), self.dir / "B3.pdb"), "s1")
+        p4 = load_helix(write_model(build_pdna_model("ACGT", "TGCA"), self.dir / "P4.pdb"), "s2")
+        self.assertEqual(detect_helix_type(b3), "B")
+        self.assertEqual(detect_helix_type(p4), "P")
+        self.assertAlmostEqual(helix_phosphate_radius(b3), 9.5, delta=0.2)
+        self.assertAlmostEqual(helix_phosphate_radius(p4), 2.5, delta=0.05)
+
+    def test_b_p_b_with_three_bp_arms_needs_no_types(self) -> None:
+        b3 = write_model(b_dna_from_core("GCA"), self.dir / "B3.pdb")
+        b3b = write_model(b_dna_from_core("TGC"), self.dir / "B3b.pdb")
+        p7 = write_model(build_pdna_model("ACGTTGA", "TCAACGT"), self.dir / "P7.pdb")
+        out = self.dir / "bpb_short.pdb"
+        result, _log = run_quiet([b3, p7, b3b], out)
+        self.assertEqual(result["types"], ["B", "P", "B"])
+        rev = lambda s: "".join(DNA_COMPLEMENT[b] for b in reversed(s))  # noqa: E731
+        self.assert_ligated(out, ["GCA" + "ACGTTGA" + "TGC", rev("TGC") + "TCAACGT" + rev("GCA")])
 
     def test_p_dna_screw_axis(self) -> None:
         line = screw_axis_line(load_helix(self.p_pdb, "s2"))
