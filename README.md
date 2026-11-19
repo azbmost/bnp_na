@@ -393,7 +393,13 @@ The bundled core holds two B-DNA base pairs, two transition levels, and two P-DN
 - At the P-DNA end, rebuilds the helix's two terminal levels as the core's transition levels, which take over their bases. The P-DNA keeps its own nucleotides from the third level on; the core's P levels only position it.
 - Writes a final ligated PDB with two continuous strands numbered 5' to 3', and a raw aligned PDB with `_raw` before the file extension.
 
-Bases are grafted in the standard base reference frame, so the output strands carry exactly the input sequences, and chain A of the first input stays in output chain A. A B-DNA needs at least 3 bp for one junction end (5 bp with junctions at both ends); a P-DNA needs at least 4 levels for one junction end and 7 with junctions at both ends, so that three P-form levels separate the two transitions.
+Bases are grafted in the standard base reference frame, so the output strands carry exactly the input sequences, and chain A of the first input stays in output chain A.
+
+### Choosing Helix Lengths
+
+The transition nucleotides count as P-DNA: at each junction they are the P-DNA's two terminal levels and keep its bases, while the B-DNA keeps every base pair. So a P-DNA of N levels keeps N − 2 P-form levels with one junction and N − 4 between two junctions. To get k P-form levels, enter k + 2 levels, or k + 4 between two B-DNAs. For example, an 8-level P-DNA joined to one B-DNA gives 2 transition levels and 6 P-form levels.
+
+This is where the minimum lengths come from. A P-DNA needs at least 4 levels for one junction end: the two transition levels plus the two P-form levels the core is fitted on. With junctions at both ends it needs 7, so that three P-form levels separate the two transitions. A B-DNA needs at least 3 bp for one junction end and 5 bp with junctions at both ends.
 
 ### The Junction Model
 

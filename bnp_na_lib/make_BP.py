@@ -30,6 +30,12 @@ backbone there runs from the B-DNA radius (P at about 9.5 A) into the P-DNA
 core (P at 2.5 A). There is no experimental B-P junction structure; see
 core_BP.py for how the transition was modeled.
 
+Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels
+keeps N - 2 P-form levels with one junction and N - 4 between two junctions;
+for k P-form levels, enter k + 2 (or k + 4). Hence a P-DNA needs at least 4
+levels, or 7 with junctions at both ends (MIN_P_LEVELS). A B-DNA keeps every
+base pair and needs at least 3 bp, or 5 with junctions at both ends (MIN_B_BP).
+
 Helix types are detected from the geometry (P-DNA has its phosphates within
 about 5 A of the helix axis; B-DNA near 9.5 A) unless --types is given, and
 consecutive inputs must alternate between B and P. Use bnp_na-built inputs:
@@ -612,7 +618,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description=(
             "Build multi-segment B-DNA/P-DNA constructs joined by B-P junction cores. Inputs alternate "
             "between B-DNA and P-DNA PDB files, in either order (B P B ... or P B P ...)."
-        )
+        ),
+        epilog=(
+            "Lengths: at each junction the P-DNA's 2 terminal levels become the transition (bases kept), so a "
+            "P-DNA of N levels keeps N - 2 P-form levels with one junction and N - 4 between two junctions; for "
+            "k P-form levels, enter k + 2 (or k + 4). A P-DNA needs at least 4 levels (7 with junctions at both "
+            "ends). A B-DNA keeps every base pair and needs at least 3 bp (5 with junctions at both ends)."
+        ),
     )
     p.add_argument("dna_files", nargs="+", help="Input PDB files in construct order.")
     p.add_argument("--out", default=DEFAULT_OUTPUT_NAME,

@@ -2691,11 +2691,14 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             text=(
                 "Each junction inserts a B-P core: the B-DNA end hands its 2 terminal base pairs to the core and the "
                 "P-DNA end's 2 terminal levels become the transition, in which the backbone moves from the B-DNA "
-                "radius into the P-DNA core. All bases are kept, so the output strands carry the input sequences. "
-                "A B-DNA needs at least 3 bp (5 with junctions at both ends) and a P-DNA at least 4 levels (7 with junctions at both ends). Use bnp_na-built "
-                "helices; default B-DNA (minimized and regularized) fits the core exactly. The transition is a "
-                "model, not an experimental structure. Output: a ligated PDB and a raw aligned PDB with _raw "
-                "before the extension."
+                "radius into the P-DNA core. All bases are kept, so the output strands carry the input sequences.\n"
+                "Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels keeps N − 2 P-form "
+                "levels with one junction and N − 4 between two junctions; for k P-form levels, enter k + 2 "
+                "(or k + 4). A P-DNA therefore needs at least 4 levels (7 with junctions at both ends). A B-DNA "
+                "keeps every base pair and needs at least 3 bp (5 with junctions at both ends).\n"
+                "Use bnp_na-built helices; default B-DNA (minimized and regularized) fits the core exactly. The "
+                "transition is a model, not an experimental structure. Output: a ligated PDB and a raw aligned PDB "
+                "with _raw before the extension."
             ),
             style="Hint.TLabel",
             wraplength=820,
