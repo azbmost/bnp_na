@@ -89,6 +89,11 @@ TRANSITION_LEVELS = [(("E", 3), ("F", 5)), (("E", 4), ("F", 4)), (("E", 5), ("F"
 # P end, interior -> outer. Used only to position the P-DNA helix; the helix
 # keeps its own nucleotides at these two levels.
 P_END_LEVELS = [(("E", 6), ("F", 2)), (("E", 7), ("F", 1))]
+# P-form levels that must separate two junctions on one P-DNA. This core's
+# transitions wind forward and stay clear of each other with a single level
+# between them (closest contact 2.7 A, a Watson-Crick hydrogen bond in the
+# B-DNA, over random builds with 1, 2 and 3 levels kept).
+MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS = 1
 
 PDB_LINES = [
     'ATOM      1  P    DG E   1       9.452   0.989  25.628  1.00  0.00           P\n',

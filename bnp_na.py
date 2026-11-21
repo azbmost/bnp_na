@@ -1004,6 +1004,87 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
 
         footer.add_button("Close", win.destroy)
 
+    def open_bp_builder_help(self) -> None:
+        """Help window of the B-P builder: short sections with bullets instead of a wall of text."""
+        win = tk.Toplevel(self)
+        self._set_optional_window_icon(win)
+        win.title("B-P builder help")
+        win.geometry("760x660+240+120")
+        win.minsize(600, 420)
+        win.transient(self)
+
+        footer = ui.Footer(win)
+        footer.pack(side="bottom", fill="x")
+        ui.hairline(win).pack(side="bottom", fill="x")
+        body = ttk.Frame(win, padding=(20, 16, 20, 16))
+        body.pack(side="top", fill="both", expand=True)
+        body.grid_columnconfigure(0, weight=1)
+        body.grid_rowconfigure(0, weight=1)
+        text_view = ui.LogView(body, wrap="word", height=24)
+        text_view.grid(row=0, column=0, sticky="nsew")
+        text = text_view.text
+        text.configure(font="AzbBody", background=ui.C.BG, padx=16, pady=12, spacing1=2, spacing3=2)
+        text.tag_configure("title", font="AzbTitle", spacing3=6)
+        text.tag_configure("heading", font="AzbSection", spacing1=12, spacing3=4)
+        text.tag_configure("bullet", lmargin1=12, lmargin2=30, spacing1=1, spacing3=3)
+        text.tag_configure("para", spacing3=4)
+
+        sections = [
+            ("What a junction does", [
+                "Between every neighbouring pair of input helices the builder inserts a modeled B-P junction "
+                "core and fits it to both helices on their sugar atoms. Nothing is relaxed or refined: a build "
+                "is rigid fitting, trimming, base grafting and ligation, and takes a fraction of a second.",
+                "The B-DNA end hands its two terminal base pairs to the core, which carries the same bases, so "
+                "every B-DNA base pair is kept.",
+                "The P-DNA end's T terminal levels (T = Transition) are rebuilt as the transition, in which the "
+                "backbone moves from the B-DNA radius (P atoms 9.5 Å from the axis) into the P-DNA core "
+                "(2.5 Å). They keep the P-DNA's bases.",
+                "The output strands therefore carry exactly the input sequences, and chain A of the first input "
+                "stays chain A.",
+            ]),
+            ("Transition: 2 or 3 nucleotides per strand", [
+                "2 (default): the compact core. Its strand I swings back about the axis as it enters the P-DNA "
+                "(one backbone step of −134°), so a junction adds only about 25° of twist.",
+                "3: every backbone step on both strands turns forward, between the B-DNA twist (34°) and the "
+                "P-DNA twist (132°); all sugars are C2′-endo and all bases anti. A junction adds about "
+                "267° of twist.",
+                "Both are models: there is no experimental structure of a B-P junction.",
+            ]),
+            ("Choosing lengths", [
+                "The transition nucleotides count as P-DNA: a P-DNA of N levels keeps N − T P-form levels "
+                "with one junction and N − 2T between two junctions. For k P-form levels enter k + T levels "
+                "(or k + 2T).",
+                "Minimum P-DNA: T + 2 levels for one junction (4 with Transition 2, 5 with Transition 3) and "
+                "7 levels between two junctions with either transition.",
+                "Minimum B-DNA: 3 bp for one junction, 5 bp with junctions at both ends. No B-DNA base pair is "
+                "lost.",
+                "Twist of a B-P-B construct from its first to its last base pair: about 34.3° × "
+                "(x + z − 2) + 131.8° × (y − 2T − 1) + 2 × 25° (Transition 2) "
+                "or 2 × 267° (Transition 3), for x bp, y levels and z bp.",
+            ]),
+            ("Inputs and output", [
+                "Use bnp_na-built helices. A default B-DNA (minimized and regularized) fits the core exactly, "
+                "and every bnp_na P-DNA matches it exactly; other B-DNA models are fitted on their sugar atoms "
+                "and the RMSD is reported in the log.",
+                "Helix types: leave blank to detect B or P from the phosphate radius about the screw axis, or "
+                "type one letter per file in construct order, e.g. BPB.",
+                "Axis correction and the B-DNA axis source work as in the B-Z builder; P-DNA axes always come "
+                "from the helix's own screw symmetry.",
+                "Output: the ligated PDB with two continuous strands, and a raw aligned PDB (every piece in "
+                "place, before trimming) with _raw before the extension.",
+            ]),
+        ]
+        text.insert("end", "B-P structure builder\n", "title")
+        text.insert("end", "Joins alternating B-DNA and P-DNA PDB files into one construct through modeled "
+                           "junction cores.\n", "para")
+        for heading, items in sections:
+            text.insert("end", heading + "\n", "heading")
+            for item in items:
+                text.insert("end", "•  " + item + "\n", "bullet")
+        text.configure(state="disabled")
+
+        footer.add_button("Close", win.destroy)
+
     # ------------------------------------------------------------------
     # Shared look of the tool dialogs
     # ------------------------------------------------------------------
@@ -2710,28 +2791,19 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             justify="left",
         ).pack(side="left", padx=(12, 0))
 
-        builder_hint = ttk.Label(
-            body,
+        hint_row = ttk.Frame(body)
+        hint_row.grid(row=8, column=0, columnspan=3, sticky="we", pady=(6, 12))
+        ui.help_button(hint_row, command=self.open_bp_builder_help).pack(side="left", padx=(0, 10))
+        ttk.Label(
+            hint_row,
             text=(
-                "Each junction inserts a B-P core: the B-DNA end hands its 2 terminal base pairs to the core, and "
-                "the P-DNA end's T terminal levels (T = Transition) become the transition, in which the backbone "
-                "moves from the B-DNA radius into the P-DNA core. All bases are kept, so the output strands carry "
-                "the input sequences.\n"
-                "Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels keeps N − T P-form "
-                "levels with one junction and N − 2T between two junctions; for k P-form levels, enter k + T (or "
-                "k + 2T). A P-DNA needs at least T + 2 levels, or 2T + 3 with junctions at both ends: 4 and 7 "
-                "for the 2-nt transition, 5 and 9 for the 3-nt one. A B-DNA keeps every base pair and needs at "
-                "least 3 bp (5 with junctions at both ends).\n"
-                "Both transitions are models, not experimental structures. Use bnp_na-built helices; default "
-                "B-DNA (minimized and regularized) fits the core exactly. Output: a ligated PDB and a raw aligned "
-                "PDB with _raw before the extension."
+                "Each junction inserts a modeled B-P core and keeps every input base. The ? explains the two "
+                "transitions, how levels are counted and what is written."
             ),
             style="Hint.TLabel",
-            wraplength=820,
+            wraplength=780,
             justify="left",
-        )
-        builder_hint.grid(row=8, column=0, columnspan=3, sticky="w", pady=(6, 12))
-        self._wrap_to_width(body, builder_hint)
+        ).pack(side="left", fill="x", expand=True)
 
         footer.add_button("Close", win.destroy)
         run_btn = footer.add_button("Build B-P structure", primary=True)

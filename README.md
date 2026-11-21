@@ -408,7 +408,7 @@ Both are models. The 3-nt transition costs one more P-DNA level per junction; se
 
 The transition nucleotides count as P-DNA: at each junction they are the P-DNA's terminal levels, as many as the transition has nucleotides (T = 2 or 3), and they keep its bases, while the B-DNA keeps every base pair. So a P-DNA of N levels keeps N − T P-form levels with one junction and N − 2T between two junctions. To get k P-form levels, enter k + T levels, or k + 2T between two B-DNAs. For example, an 8-level P-DNA joined to one B-DNA gives 2 transition levels and 6 P-form levels with the 2-nt transition, or 3 and 5 with the 3-nt one.
 
-This is where the minimum lengths come from. A P-DNA needs at least T + 2 levels for one junction end (the transition levels plus the two P-form levels the core is fitted on) and 2T + 3 with junctions at both ends, so that three P-form levels separate the two transitions: 4 and 7 levels for the 2-nt transition, 5 and 9 for the 3-nt one. A B-DNA needs at least 3 bp for one junction end and 5 bp with junctions at both ends.
+This is where the minimum lengths come from. A P-DNA needs at least T + 2 levels for one junction end, the transition levels plus the two P-form levels the core is fitted on: 4 for the 2-nt transition, 5 for the 3-nt one. Between two junctions it needs 7 levels with either transition, for different reasons: the 2-nt transitions reach toward the axis as they enter the P-DNA and run into each other unless three P-form levels separate them (with one or two, atoms come within 0.2–0.4 Å), while the 3-nt transitions wind forward and are clear of each other with a single P-form level between them. A B-DNA needs at least 3 bp for one junction end and 5 bp with junctions at both ends.
 
 ### The Junction Model
 

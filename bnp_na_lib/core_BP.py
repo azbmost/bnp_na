@@ -71,6 +71,11 @@ TRANSITION_LEVELS = [(("E", 3), ("F", 4)), (("E", 4), ("F", 3))]
 # P end, interior -> outer. Used only to position the P-DNA helix; the helix
 # keeps its own nucleotides at these two levels.
 P_END_LEVELS = [(("E", 5), ("F", 2)), (("E", 6), ("F", 1))]
+# P-form levels that must separate two junctions on one P-DNA. Strand I of this
+# core reaches toward the axis as it enters the P-DNA, so with one or two
+# levels between them two transitions run into each other (contacts of 0.2
+# and 0.4 A in random builds); with three they are clear.
+MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS = 3
 
 PDB_LINES = [
     'ATOM      1  P    DG E   1       9.452   0.989  25.628  1.00  0.00           P\n',

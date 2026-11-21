@@ -49,7 +49,7 @@ Top-level app folder contains only:
 2. `make_BP.py` / `build_bp.py` / `bnp_na.py`: `--transition` (GUI `Transition`) selects the junction core, 2 nt per strand (`core_BP.py`, default) or 3 nt (`core_BP3.py`); the core bookkeeping (`CoreLayout`) is derived from the chosen module.
 3. New helper module: `core_BP3.py`.
 4. `make_BP.py`: helix types are detected from each helix's screw axis, so a 3-bp B-DNA is no longer read as P-DNA.
-5. The B-P builder's hint, the README and the CLI help explain how transition nucleotides are counted and how to choose P-DNA lengths.
+5. The B-P builder's explanation is a help window behind a `?` button (`open_bp_builder_help`); the README and the CLI help explain how transition nucleotides are counted and how to choose P-DNA lengths.
 
 ## V13.22 changes
 

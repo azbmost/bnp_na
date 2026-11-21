@@ -236,10 +236,16 @@ class BPBuilderTest(unittest.TestCase):
         run_quiet([self.b_pdb, p5], out, transition="3")
         rev_b = "".join(DNA_COMPLEMENT[b] for b in reversed(self.b_seq))
         self.assert_ligated(out, [self.b_seq + "ACGTT", "AACGT" + rev_b])
+        # Two junction ends: one P-form level between the 3-nt transitions is enough (7 levels); 6 is not.
         b2 = write_model(b_dna_from_core("CCGATAGC"), self.dir / "B8b.pdb")
-        p8 = write_model(build_pdna_model("ACGTTGAC", "GTCAACGT"), self.dir / "P8b.pdb")
+        p6 = write_model(build_pdna_model("ACGTTG", "CAACGT"), self.dir / "P6b.pdb")
         with self.assertRaises(SystemExit):
-            run_quiet([self.b_pdb, p8, b2], self.dir / "bpb8.pdb", transition="3")
+            run_quiet([self.b_pdb, p6, b2], self.dir / "bpb6.pdb", transition="3")
+        p7 = write_model(build_pdna_model("ACGTTGA", "TCAACGT"), self.dir / "P7b.pdb")
+        out = self.dir / "bpb7_3nt.pdb"
+        run_quiet([self.b_pdb, p7, b2], out, transition="3")
+        rev = lambda s: "".join(DNA_COMPLEMENT[b] for b in reversed(s))  # noqa: E731
+        self.assert_ligated(out, [self.b_seq + "ACGTTGA" + "CCGATAGC", rev("CCGATAGC") + "TCAACGT" + rev(self.b_seq)])
 
     def test_three_nt_core_layout(self) -> None:
         from bnp_na_lib import core_BP3
@@ -247,7 +253,8 @@ class BPBuilderTest(unittest.TestCase):
 
         layout = core_layout("3")
         self.assertEqual((layout.n_transition, layout.p_end_trim, layout.b_end_trim), (3, 3, 2))
-        self.assertEqual(layout.min_p_levels, {1: 5, 2: 9})
+        self.assertEqual(layout.min_p_levels, {1: 5, 2: 7})
+        self.assertEqual(core_layout("2").min_p_levels, {1: 4, 2: 7})
         self.assertEqual(core_BP3.TRANSITION_LEVELS, [(("E", 3), ("F", 5)), (("E", 4), ("F", 4)), (("E", 5), ("F", 3))])
         self.assertEqual(core_BP3.P_END_LEVELS, [(("E", 6), ("F", 2)), (("E", 7), ("F", 1))])
         core = new_core("c", layout=layout)

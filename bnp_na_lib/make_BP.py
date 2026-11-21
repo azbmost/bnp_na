@@ -44,10 +44,12 @@ core modules for how each transition was modeled.
 Lengths: the transition nucleotides count as P-DNA, so with T transition
 nucleotides a P-DNA of N levels keeps N - T P-form levels with one junction
 and N - 2T between two junctions; for k P-form levels, enter k + T (or
-k + 2T). Hence a P-DNA needs at least T + 2 levels, or 2T + 3 with junctions
-at both ends: 4 and 7 for T = 2, 5 and 9 for T = 3 (CoreLayout.min_p_levels).
-A B-DNA keeps every base pair and needs at least 3 bp, or 5 with junctions at
-both ends.
+k + 2T). Hence a P-DNA needs at least T + 2 levels for one junction (4 for
+T = 2, 5 for T = 3) and 7 levels between two junctions with either core: the
+2-nt core must keep three P-form levels between its transitions, which reach
+toward the axis, the 3-nt core only one (CoreLayout.min_p_levels). A B-DNA
+keeps every base pair and needs at least 3 bp, or 5 with junctions at both
+ends.
 
 Helix types are detected from the geometry (P-DNA has its phosphates within
 about 5 A of the helix axis; B-DNA near 9.5 A) unless --types is given, and
@@ -133,9 +135,10 @@ class CoreLayout:
     (P end). Minimum lengths are by number of junction ends: B gives up its
     end pairs and keeps at least one between them; P gives up its transition
     levels and keeps the next two, which the core is fitted on, and with
-    junctions at both ends it must keep three, or the two transitions reach
-    into each other (a 6-level P-DNA between two B-DNAs with the 2-nt core puts
-    two bases 0.4 A apart).
+    junctions at both ends it must keep the core module's
+    MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS P-form levels between the two
+    transitions (3 for the 2-nt core, whose strand I reaches toward the axis;
+    1 for the 3-nt core).
     """
 
     key: str
@@ -153,7 +156,8 @@ class CoreLayout:
         return cls(
             key=key, module=module, n_transition=n_t, b_end_trim=b_trim, p_end_trim=n_t,
             min_b_bp={1: b_trim + 1, 2: 2 * b_trim + 1},
-            min_p_levels={1: n_t + len(module.P_END_LEVELS), 2: 2 * n_t + 3},
+            min_p_levels={1: n_t + len(module.P_END_LEVELS),
+                          2: 2 * n_t + getattr(module, "MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS", 3)},
         )
 
 
@@ -727,7 +731,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help=("Transition nucleotides per strand at each junction (default %(default)s): 2 = the "
                          "compact core; 3 = the longer transition in which every backbone step on both "
                          "strands turns forward, between the B-DNA and P-DNA twists. A P-DNA then gives up "
-                         "3 levels per junction and needs at least 5 levels (9 with junctions at both ends)."))
+                         "3 levels per junction and needs at least 5 levels (7 with junctions at both ends)."))
     return p
 
 
