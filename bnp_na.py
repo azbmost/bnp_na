@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""bnp_na V13.22: Building and placing nucleic acid helices.
+"""bnp_na V13.23: Building and placing nucleic acid helices.
 
 Top-level GUI/controller. All helper modules live in ./bnp_na_lib/.
 """
@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-__version__ = "V13.22"
+__version__ = "V13.23"
 APP_NAME = "bnp_na"
 
 HELP_TEXT = f"""usage: {APP_NAME}.py [-h] [-v]
@@ -2527,7 +2527,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         body, footer = self._tool_dialog_frame(win, "B-P builder", tool="bp_builder")
         body.grid_columnconfigure(1, weight=1)
         body.grid_rowconfigure(1, weight=1)
-        body.grid_rowconfigure(8, weight=2)
+        body.grid_rowconfigure(9, weight=2)
 
         try:
             out_dir = Path(self.output_dir_var.get()).expanduser()
@@ -2544,6 +2544,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
         types_var = tk.StringVar(value="")
         axis_mode_var = tk.StringVar(value="codirectional")
         axis_source_var = tk.StringVar(value="auto")
+        transition_var = tk.StringVar(value="2")
         out_default_mode = {"value": True}
 
         def _files() -> list[str]:
@@ -2686,32 +2687,57 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
             justify="left",
         ).pack(side="left", padx=(12, 0))
 
+        ttk.Label(body, text="Transition:", style="Field.TLabel").grid(
+            row=7, column=0, sticky="w", padx=label_pad, **field
+        )
+        transition_row = ttk.Frame(body)
+        transition_row.grid(row=7, column=1, columnspan=2, sticky="we", **field)
+        ttk.Combobox(
+            transition_row,
+            textvariable=transition_var,
+            values=("2", "3"),
+            state="readonly",
+            width=16,
+        ).pack(side="left")
+        ttk.Label(
+            transition_row,
+            text=(
+                "Nucleotides per strand rebuilt at each junction. 2: compact core. 3: every backbone step on "
+                "both strands turns forward, between the B-DNA and P-DNA twists."
+            ),
+            style="Hint.TLabel",
+            wraplength=520,
+            justify="left",
+        ).pack(side="left", padx=(12, 0))
+
         builder_hint = ttk.Label(
             body,
             text=(
-                "Each junction inserts a B-P core: the B-DNA end hands its 2 terminal base pairs to the core and the "
-                "P-DNA end's 2 terminal levels become the transition, in which the backbone moves from the B-DNA "
-                "radius into the P-DNA core. All bases are kept, so the output strands carry the input sequences.\n"
-                "Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels keeps N − 2 P-form "
-                "levels with one junction and N − 4 between two junctions; for k P-form levels, enter k + 2 "
-                "(or k + 4). A P-DNA therefore needs at least 4 levels (7 with junctions at both ends). A B-DNA "
-                "keeps every base pair and needs at least 3 bp (5 with junctions at both ends).\n"
-                "Use bnp_na-built helices; default B-DNA (minimized and regularized) fits the core exactly. The "
-                "transition is a model, not an experimental structure. Output: a ligated PDB and a raw aligned PDB "
-                "with _raw before the extension."
+                "Each junction inserts a B-P core: the B-DNA end hands its 2 terminal base pairs to the core, and "
+                "the P-DNA end's T terminal levels (T = Transition) become the transition, in which the backbone "
+                "moves from the B-DNA radius into the P-DNA core. All bases are kept, so the output strands carry "
+                "the input sequences.\n"
+                "Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels keeps N − T P-form "
+                "levels with one junction and N − 2T between two junctions; for k P-form levels, enter k + T (or "
+                "k + 2T). A P-DNA needs at least T + 2 levels, or 2T + 3 with junctions at both ends: 4 and 7 "
+                "for the 2-nt transition, 5 and 9 for the 3-nt one. A B-DNA keeps every base pair and needs at "
+                "least 3 bp (5 with junctions at both ends).\n"
+                "Both transitions are models, not experimental structures. Use bnp_na-built helices; default "
+                "B-DNA (minimized and regularized) fits the core exactly. Output: a ligated PDB and a raw aligned "
+                "PDB with _raw before the extension."
             ),
             style="Hint.TLabel",
             wraplength=820,
             justify="left",
         )
-        builder_hint.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 12))
+        builder_hint.grid(row=8, column=0, columnspan=3, sticky="w", pady=(6, 12))
         self._wrap_to_width(body, builder_hint)
 
         footer.add_button("Close", win.destroy)
         run_btn = footer.add_button("Build B-P structure", primary=True)
 
         bp_log_view = ui.LogView(body, wrap="none", height=10, horizontal=True)
-        bp_log_view.grid(row=8, column=0, columnspan=3, sticky="nsew")
+        bp_log_view.grid(row=9, column=0, columnspan=3, sticky="nsew")
         bp_log = bp_log_view.text
 
         def _set_dialog_log(text: str) -> None:
@@ -2739,6 +2765,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 f"Helix types: {types_var.get().strip() or 'auto-detect'}\n"
                 f"Axis correction: {axis_mode_var.get()}\n"
                 f"B-DNA axis source: {axis_source_var.get()}\n"
+                f"Transition: {transition_var.get()} nt per strand\n"
             )
             _set_dialog_log(start_log)
             self._set_log(start_log)
@@ -2750,6 +2777,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                     types=types_var.get().strip(),
                     axis_mode=axis_mode_var.get(),
                     axis_source=axis_source_var.get(),
+                    transition=transition_var.get(),
                 )
                 pdb_out = Path(str(result["pdb_out"]))
                 remarks_log = _prepend_final_pdb_remarks(
@@ -2766,6 +2794,7 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                         f"Helix types: {result['types']}",
                         f"Axis correction: {result['axis_mode']}",
                         f"B-DNA axis source: {result['axis_source']}",
+                        f"Transition: {result['transition']} nt per strand",
                         "",
                         str(result.get("log_text", "")),
                         "",

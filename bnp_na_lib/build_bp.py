@@ -9,7 +9,15 @@ from pathlib import Path
 from typing import Dict, Sequence, Union
 
 from .build_common import PipelineError
-from .make_BP import AXIS_SOURCES, DEFAULT_OUTPUT_NAME, raw_output_path, resolve_output_path, run_pipeline
+from .make_BP import (
+    AXIS_SOURCES,
+    DEFAULT_OUTPUT_NAME,
+    DEFAULT_TRANSITION,
+    TRANSITIONS,
+    raw_output_path,
+    resolve_output_path,
+    run_pipeline,
+)
 from .make_BZV2_3 import normalize_axis_mode
 
 
@@ -27,8 +35,13 @@ def build_bp_structure(
     types: str = "",
     axis_mode: str = "codirectional",
     axis_source: str = "auto",
+    transition: str = DEFAULT_TRANSITION,
 ) -> Dict[str, object]:
-    """Build a multi-segment B/P DNA model and capture the make_BP log."""
+    """Build a multi-segment B/P DNA model and capture the make_BP log.
+
+    ``transition`` is the number of transition nucleotides per strand at each
+    junction, "2" (compact core) or "3" (longer, forward-winding transition).
+    """
 
     paths = [_expanded_path(path) for path in input_files if str(path).strip()]
     if len(paths) < 2:
@@ -45,6 +58,9 @@ def build_bp_structure(
     if axis_source_arg not in AXIS_SOURCES:
         raise PipelineError(f"Unknown axis source: {axis_source}")
     types_arg = "".join(ch for ch in (types or "").upper() if ch in "BP")
+    transition_arg = str(transition or DEFAULT_TRANSITION).strip()
+    if transition_arg not in TRANSITIONS:
+        raise PipelineError(f"Transition must be one of {', '.join(TRANSITIONS)} nucleotides, got {transition!r}")
 
     out_path = Path(out_pdb).expanduser() if str(out_pdb).strip() else paths[0].parent / DEFAULT_OUTPUT_NAME
     if not out_path.is_absolute():
@@ -57,8 +73,10 @@ def build_bp_structure(
         types=types_arg,
         axis_mode=normalized_axis_mode,
         axis_source=axis_source_arg,
+        transition=transition_arg,
     )
-    cli_args = ["--out", str(out_path), "--axis-mode", normalized_axis_mode, "--axis-source", axis_source_arg]
+    cli_args = ["--out", str(out_path), "--axis-mode", normalized_axis_mode, "--axis-source", axis_source_arg,
+                "--transition", transition_arg]
     if types_arg:
         cli_args += ["--types", types_arg]
     cli_args.extend(str(path) for path in paths)
@@ -88,5 +106,6 @@ def build_bp_structure(
         "pdb_raw": raw_output_path(resolved_out),
         "axis_mode": normalized_axis_mode,
         "axis_source": axis_source_arg,
+        "transition": transition_arg,
         "log_text": buf.getvalue(),
     }

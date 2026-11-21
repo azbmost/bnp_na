@@ -2,7 +2,7 @@
 
 `bnp_na` is a Tkinter GUI for building and placing nucleic acid helices. It can generate B-DNA, A-DNA, A-RNA, Z-DNA, and P-DNA models, normalize PDB atom/residue names, align the helix to the +Z axis, and write a final oriented/placed PDB file. It also includes tools for combining PDB files, terminal phosphate addition, B-Z and B-P structure building, and triplex conversion.
 
-The current app version is `V13.22`.
+The current app version is `V13.23`.
 
 ## What It Does
 
@@ -385,25 +385,38 @@ Use helices built by bnp_na. A default B-DNA (DSSR rebuild, minimized and regula
 
 ### What The Builder Does
 
-The bundled core holds two B-DNA base pairs, two transition levels, and two P-DNA levels. For every neighboring pair of input helices, the builder:
+A bundled core holds two B-DNA base pairs, the transition levels (two or three per strand, see `Transition Length` below), and two P-DNA levels. For every neighboring pair of input helices, the builder:
 
 - Inserts one fresh copy of the core and fits it to the previous helix on sugar atoms `C1'`, `C2'`, `C3'`, `C4'`, `O5'`, and `C5'`.
 - Fits the next helix to the other end of the core.
 - At the B-DNA end, replaces the helix's two terminal base pairs with the core's two B base pairs, which take over their bases. Every B-DNA base pair is kept.
-- At the P-DNA end, rebuilds the helix's two terminal levels as the core's transition levels, which take over their bases. The P-DNA keeps its own nucleotides from the third level on; the core's P levels only position it.
+- At the P-DNA end, rebuilds the helix's terminal levels (as many as the transition has nucleotides) as the core's transition levels, which take over their bases. The P-DNA keeps its own nucleotides from the next level on; the core's P levels only position it.
 - Writes a final ligated PDB with two continuous strands numbered 5' to 3', and a raw aligned PDB with `_raw` before the file extension.
 
 Bases are grafted in the standard base reference frame, so the output strands carry exactly the input sequences, and chain A of the first input stays in output chain A.
 
+### Transition Length
+
+`Transition` chooses how many nucleotides per strand are rebuilt at each junction, from two bundled cores:
+
+- `2` (default): the compact core `core_BP.py`. Its strand I swings back around the axis as it enters the P-DNA (one backbone step of −134°), so a junction adds only about 25° of twist.
+- `3`: the longer transition `core_BP3.py`. Every backbone step on both strands turns forward, between the B-DNA twist (34°) and the P-DNA twist (132°), all sugars are C2′-endo like both helices, and all bases are anti. A junction adds about 267° of twist.
+
+Both are models. The 3-nt transition costs one more P-DNA level per junction; see the next section. For the twist of a B-P-B construct with x bp, y levels and z bp, measured from its first to its last base pair: about 34.26° × (x + z − 2) + 131.8° × (y − 2T − 1) + 2 × 25° (T = 2) or 2 × 267° (T = 3).
+
 ### Choosing Helix Lengths
 
-The transition nucleotides count as P-DNA: at each junction they are the P-DNA's two terminal levels and keep its bases, while the B-DNA keeps every base pair. So a P-DNA of N levels keeps N − 2 P-form levels with one junction and N − 4 between two junctions. To get k P-form levels, enter k + 2 levels, or k + 4 between two B-DNAs. For example, an 8-level P-DNA joined to one B-DNA gives 2 transition levels and 6 P-form levels.
+The transition nucleotides count as P-DNA: at each junction they are the P-DNA's terminal levels, as many as the transition has nucleotides (T = 2 or 3), and they keep its bases, while the B-DNA keeps every base pair. So a P-DNA of N levels keeps N − T P-form levels with one junction and N − 2T between two junctions. To get k P-form levels, enter k + T levels, or k + 2T between two B-DNAs. For example, an 8-level P-DNA joined to one B-DNA gives 2 transition levels and 6 P-form levels with the 2-nt transition, or 3 and 5 with the 3-nt one.
 
-This is where the minimum lengths come from. A P-DNA needs at least 4 levels for one junction end: the two transition levels plus the two P-form levels the core is fitted on. With junctions at both ends it needs 7, so that three P-form levels separate the two transitions. A B-DNA needs at least 3 bp for one junction end and 5 bp with junctions at both ends.
+This is where the minimum lengths come from. A P-DNA needs at least T + 2 levels for one junction end (the transition levels plus the two P-form levels the core is fitted on) and 2T + 3 with junctions at both ends, so that three P-form levels separate the two transitions: 4 and 7 levels for the 2-nt transition, 5 and 9 for the 3-nt one. A B-DNA needs at least 3 bp for one junction end and 5 bp with junctions at both ends.
 
 ### The Junction Model
 
-There is no experimental structure of a B-DNA/P-DNA junction, so the core is a model. In the transition the backbone runs from the B-DNA radius (P at about 9.5 Å) into the P-DNA center (P at 2.5 Å) over two nucleotides on each strand, while the last B-DNA base pair stays paired; the first P-form level sits 10 Å above that base pair.
+There is no experimental structure of a B-DNA/P-DNA junction, so both cores are models.
+
+With the 3-nt transition (`core_BP3.py`), the first P-form level sits 14 Å above the last B pair and each strand's three transition nucleotides were built so that every phosphate-to-phosphate step turns forward about the axis, between the B-DNA and P-DNA twists: 35°, 45°, 36° and 51° on strand I, 33°, 71°, 131° and 133° on strand II, with the sugars C2′-endo and the bases anti. The two strands wind by different amounts (167° and 368°) because strand I climbs about 6 Å less than strand II between the last B pair and the first P-form level; a junction adds about 267° of twist. See the `core_BP3.py` docstring for the checks.
+
+With the 2-nt transition (`core_BP.py`): In the transition the backbone runs from the B-DNA radius (P at about 9.5 Å) into the P-DNA center (P at 2.5 Å) over two nucleotides on each strand, while the last B-DNA base pair stays paired; the first P-form level sits 10 Å above that base pair.
 
 The core was built once, offline, by torsion-space loop closure from ideal nucleotide geometry, and checked so that it holds for any sequence: every base near the junction was scored as the union of A, C, G and T, and MolProbity found no clashes for any of 88 base assignments tested. The transition nucleotides' bonds and angles are within 0.8σ and 2.3σ of Phenix's restraints, and every O3'-P bond through the transition is 1.60-1.61 Å. See the `core_BP.py` docstring for details.
 
@@ -423,6 +436,12 @@ Give the types explicitly and skip axis correction:
 
 ```bash
 python3 bnp_na_lib/make_BP.py --types PB --axis-mode none --out P_B.pdb P1.pdb B1.pdb
+```
+
+Use the 3-nt transition:
+
+```bash
+python3 bnp_na_lib/make_BP.py --transition 3 --out B_P_B.pdb B1.pdb P1.pdb B2.pdb
 ```
 
 ## Triplex Converter
@@ -778,7 +797,7 @@ The intermediate mirrored PDB is written in:
 The final placed PDB also contains machine-readable `REMARK` lines. These include provenance and the L-form residue annotations needed by future applications:
 
 ```text
-REMARK BNP_NA bnp_na V13.22 from DiLiuLab's AZBMOST was used to create this file.
+REMARK BNP_NA bnp_na V13.23 from DiLiuLab's AZBMOST was used to create this file.
 REMARK BNP_NA_REPOSITORY https://github.com/azbmost/bnp_na
 REMARK BNP_NA_L_FORM YES
 REMARK BNP_NA_L_FORM_KIND L-DNA

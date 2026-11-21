@@ -1,4 +1,4 @@
-# bnp_na V13.22 updated folder
+# bnp_na V13.23 updated folder
 
 Top-level app folder contains only:
 
@@ -28,8 +28,9 @@ Top-level app folder contains only:
 - `helical_axis_info.py` — DSSR selected-chain helical-axis reporter with unit-vector/angle reporting and optional Chimera/ChimeraX BILD output.
 - `make_BZV2_3.py` — standalone B-Z structure builder incorporated into V13.6; combines alternating B-DNA/Z-DNA PDB inputs using B-Z junction cores.
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
-- `make_BP.py` — B-P structure builder: combines alternating B-DNA/P-DNA PDB inputs (either order, types detected or given) through B-P junction cores, keeping every input base; rigid fits only, so a build is immediate; direct CLI.
-- `core_BP.py` — bundled, modeled B-P junction core: two B base pairs, two transition levels and two P levels, clash-free for every base choice.
+- `make_BP.py` — B-P structure builder: combines alternating B-DNA/P-DNA PDB inputs (either order, types detected from the screw axis or given) through a B-P junction core chosen with `--transition` (2 or 3 nucleotides per strand), keeping every input base; rigid fits only, so a build is immediate; direct CLI.
+- `core_BP.py` — bundled, modeled B-P junction core with a 2-nt transition: two B base pairs, two transition levels and two P levels, clash-free for every base choice.
+- `core_BP3.py` — bundled, modeled B-P junction core with a 3-nt transition in which every backbone step on both strands turns forward between the B and P twists; all sugars C2'-endo, all bases anti, clash-free for every base choice.
 - `convert_to_triplex_pdbV2_1.py` — standalone duplex-to-triplex converter incorporated into V13.7; supports antiparallel G·G-C and parallel T·A-T triplex motifs.
 - `geometry_utils.py` — shared rotation/vector helpers.
 - `na_placer.py` — final orient/place transformation after +Z alignment.
@@ -41,6 +42,14 @@ Top-level app folder contains only:
 - `bnp_na_icons.py` — bnp_na-only tool icons (the B-P builder glyph), registered at import so the shared AZBMOST files stay identical.
 - `min_P_C5.params` — default params file shown in the GUI phenix.geometry_minimization field.
 - `__init__.py` — helper package marker.
+
+## V13.23 changes
+
+1. Version is `bnp_na V13.23`.
+2. `make_BP.py` / `build_bp.py` / `bnp_na.py`: `--transition` (GUI `Transition`) selects the junction core, 2 nt per strand (`core_BP.py`, default) or 3 nt (`core_BP3.py`); the core bookkeeping (`CoreLayout`) is derived from the chosen module.
+3. New helper module: `core_BP3.py`.
+4. `make_BP.py`: helix types are detected from each helix's screw axis, so a 3-bp B-DNA is no longer read as P-DNA.
+5. The B-P builder's hint, the README and the CLI help explain how transition nucleotides are counted and how to choose P-DNA lengths.
 
 ## V13.22 changes
 

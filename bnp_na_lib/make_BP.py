@@ -13,28 +13,41 @@ sugar atoms (C1', C2', C3', C4', O5', C5'), the next helix is fitted to the
 core's other end, overlapping residues are trimmed, and the construct is
 ligated into two continuous strands numbered 5' -> 3'.
 
-The core holds two B-DNA base pairs, two transition levels and two P-DNA
-levels. Unlike the B-Z core, it carries no sequence of its own:
+Two cores are bundled and chosen with --transition, the number of transition
+nucleotides per strand at each junction:
+
+  * 2 (default): core_BP.py, the compact core. Its strand I swings back about
+    the axis as it enters the P-DNA (one step of -134 deg), so a junction adds
+    only about 25 deg of twist.
+  * 3: core_BP3.py, the longer transition. Every backbone step on both strands
+    turns forward, between the B-DNA and P-DNA twists, all sugars are
+    C2'-endo and all bases anti.
+
+A core holds two B-DNA base pairs, the transition levels and two P-DNA levels.
+Unlike the B-Z core, it carries no sequence of its own:
 
   * B end: the helix's two terminal base pairs are replaced by the core's two
     B base pairs, which take over their bases (grafted in the standard base
     reference frame), so every B-DNA base pair is kept.
-  * P end: the helix's two terminal P-DNA levels are rebuilt as the core's
-    transition levels, which take over their bases. The core's two P levels
-    only position the P helix (they match the 1PFI template exactly) and the
-    helix keeps its own nucleotides from the third level on.
+  * P end: the helix's terminal P-DNA levels (as many as the transition has
+    nucleotides) are rebuilt as the core's transition levels, which take over
+    their bases. The core's two P levels only position the P helix (they
+    match the 1PFI template exactly) and the helix keeps its own nucleotides
+    from the next level on.
 
-The output strands therefore carry exactly the input sequences. The two
-transition levels on each junction are the P-DNA side's first two levels: the
+The output strands therefore carry exactly the input sequences. The
+transition levels of a junction are the P-DNA side's first levels: the
 backbone there runs from the B-DNA radius (P at about 9.5 A) into the P-DNA
-core (P at 2.5 A). There is no experimental B-P junction structure; see
-core_BP.py for how the transition was modeled.
+core (P at 2.5 A). There is no experimental B-P junction structure; see the
+core modules for how each transition was modeled.
 
-Lengths: the transition nucleotides count as P-DNA, so a P-DNA of N levels
-keeps N - 2 P-form levels with one junction and N - 4 between two junctions;
-for k P-form levels, enter k + 2 (or k + 4). Hence a P-DNA needs at least 4
-levels, or 7 with junctions at both ends (MIN_P_LEVELS). A B-DNA keeps every
-base pair and needs at least 3 bp, or 5 with junctions at both ends (MIN_B_BP).
+Lengths: the transition nucleotides count as P-DNA, so with T transition
+nucleotides a P-DNA of N levels keeps N - T P-form levels with one junction
+and N - 2T between two junctions; for k P-form levels, enter k + T (or
+k + 2T). Hence a P-DNA needs at least T + 2 levels, or 2T + 3 with junctions
+at both ends: 4 and 7 for T = 2, 5 and 9 for T = 3 (CoreLayout.min_p_levels).
+A B-DNA keeps every base pair and needs at least 3 bp, or 5 with junctions at
+both ends.
 
 Helix types are detected from the geometry (P-DNA has its phosphates within
 about 5 A of the helix axis; B-DNA near 9.5 A) unless --types is given, and
@@ -109,17 +122,64 @@ from .standard_bases import base_code, graft_base
 
 DEFAULT_OUTPUT_NAME = "make_BP_out.pdb"
 SUGAR_ATOMS: List[str] = list(core_BP.SUGAR_ATOMS)
-N_TRANSITION = len(core_BP.TRANSITION_LEVELS)
-# Residues each helix gives up at a junction end.
-B_END_TRIM = len(core_BP.B_END_BASEPAIRS)   # replaced by the core's B pairs
-P_END_TRIM = N_TRANSITION                   # rebuilt as the core's transition levels
-# Minimum pairs (bp or levels) a helix needs, by number of junction ends.
-# B gives up two bp per end and keeps at least one between them. P gives up two
-# levels per end and keeps the next two, which the core is fitted on; with
-# junctions at both ends it must keep three, or the two transitions reach into
-# each other (a 6-level P-DNA between two B-DNAs puts two bases 0.4 A apart).
-MIN_B_BP = {1: B_END_TRIM + 1, 2: 2 * B_END_TRIM + 1}
-MIN_P_LEVELS = {1: N_TRANSITION + len(core_BP.P_END_LEVELS), 2: 2 * N_TRANSITION + 3}
+
+
+@dataclass(frozen=True)
+class CoreLayout:
+    """Residue bookkeeping of one bundled junction core.
+
+    ``n_transition`` nucleotides per strand are rebuilt at each junction; each
+    helix gives up ``b_end_trim`` base pairs (B end) or ``p_end_trim`` levels
+    (P end). Minimum lengths are by number of junction ends: B gives up its
+    end pairs and keeps at least one between them; P gives up its transition
+    levels and keeps the next two, which the core is fitted on, and with
+    junctions at both ends it must keep three, or the two transitions reach
+    into each other (a 6-level P-DNA between two B-DNAs with the 2-nt core puts
+    two bases 0.4 A apart).
+    """
+
+    key: str
+    module: object
+    n_transition: int
+    b_end_trim: int
+    p_end_trim: int
+    min_b_bp: Dict[int, int]
+    min_p_levels: Dict[int, int]
+
+    @classmethod
+    def from_module(cls, key: str, module: object) -> "CoreLayout":
+        n_t = len(module.TRANSITION_LEVELS)
+        b_trim = len(module.B_END_BASEPAIRS)
+        return cls(
+            key=key, module=module, n_transition=n_t, b_end_trim=b_trim, p_end_trim=n_t,
+            min_b_bp={1: b_trim + 1, 2: 2 * b_trim + 1},
+            min_p_levels={1: n_t + len(module.P_END_LEVELS), 2: 2 * n_t + 3},
+        )
+
+
+# Transition nucleotides per strand at each junction: "2" is the compact core
+# (core_BP.py), "3" the longer one that winds forward on both strands (core_BP3.py).
+TRANSITIONS = ("2", "3")
+DEFAULT_TRANSITION = "2"
+
+
+def core_layout(transition: str = DEFAULT_TRANSITION) -> CoreLayout:
+    key = str(transition).strip()
+    if key not in TRANSITIONS:
+        raise ValueError(f"transition must be one of {', '.join(TRANSITIONS)} nucleotides, got {transition!r}")
+    if key == "2":
+        module = core_BP
+    else:
+        from . import core_BP3 as module
+    return CoreLayout.from_module(key, module)
+
+
+DEFAULT_LAYOUT = core_layout(DEFAULT_TRANSITION)
+N_TRANSITION = DEFAULT_LAYOUT.n_transition
+B_END_TRIM = DEFAULT_LAYOUT.b_end_trim   # replaced by the core's B pairs
+P_END_TRIM = DEFAULT_LAYOUT.p_end_trim   # rebuilt as the core's transition levels
+MIN_B_BP = DEFAULT_LAYOUT.min_b_bp
+MIN_P_LEVELS = DEFAULT_LAYOUT.min_p_levels
 P_HELIX_MAX_P_RADIUS = 5.0
 # Fits within this RMSD of the best one count as equally good when choosing a helix end.
 END_TIE_RMSD = 0.1
@@ -138,16 +198,23 @@ def load_helix(path: Path, seg_id: str) -> Structure:
                      basepairs=basepairs)
 
 
-def new_core(seg_id: str) -> Structure:
-    records = core_BP.core_records()
+def new_core(seg_id: str, layout: Optional[CoreLayout] = None) -> Structure:
+    layout = layout or DEFAULT_LAYOUT
+    mod = layout.module
+    records = mod.core_records()
     residues = build_residues(records, seg_id=seg_id)
-    chains = [core_BP.STRAND_E, core_BP.STRAND_F]
+    chains = [mod.STRAND_E, mod.STRAND_F]
     # Physical order along the core: B outer pair first, P outer level last.
-    pairs = (list(reversed(core_BP.B_END_BASEPAIRS)) + list(core_BP.TRANSITION_LEVELS)
-             + list(core_BP.P_END_LEVELS))
+    pairs = list(reversed(mod.B_END_BASEPAIRS)) + list(mod.TRANSITION_LEVELS) + list(mod.P_END_LEVELS)
     basepairs = [((seg_id, a[0], a[1]), (seg_id, b[0], b[1])) for a, b in pairs]
-    return Structure(name=f"core_BP({seg_id})", seg_id=seg_id, records=records, residues=residues, chains=chains,
+    core = Structure(name=f"core_BP({seg_id})", seg_id=seg_id, records=records, residues=residues, chains=chains,
                      basepairs=basepairs)
+    core.layout = layout  # type: ignore[attr-defined]
+    return core
+
+
+def _layout_of(core: Structure) -> CoreLayout:
+    return getattr(core, "layout", DEFAULT_LAYOUT)
 
 
 def _key(struct: Structure, chain_res: Tuple[str, int]) -> ResidKey:
@@ -342,51 +409,60 @@ def _coords_for_pairs(struct: Structure, pairs: Sequence[Tuple[ResidKey, ResidKe
 
 def core_fit_pairs(core: Structure, kind: str) -> List[Tuple[ResidKey, ResidKey]]:
     """Core pairs used for fitting at one end, interior -> outer."""
+    mod = _layout_of(core).module
     if kind == "B":
-        return [_pair_keys(core, pair) for pair in core_BP.B_END_BASEPAIRS]
+        return [_pair_keys(core, pair) for pair in mod.B_END_BASEPAIRS]
     if kind == "P":
-        return [_pair_keys(core, pair) for pair in core_BP.P_END_LEVELS]
+        return [_pair_keys(core, pair) for pair in mod.P_END_LEVELS]
     raise ValueError(f"core end must be 'B' or 'P', got {kind!r}")
 
 
-def helix_fit_pairs(helix: Structure, end: str, kind: str) -> List[Tuple[ResidKey, ResidKey]]:
+def helix_fit_pairs(helix: Structure, end: str, kind: str,
+                    layout: Optional[CoreLayout] = None) -> List[Tuple[ResidKey, ResidKey]]:
     """Helix pairs matched to core_fit_pairs, in the same order.
 
     B: the helix's terminal pair sits on the core's interior B pair and the next
-    one on the core's outer B pair. P: the first N_TRANSITION levels become the
+    one on the core's outer B pair. P: the first n_transition levels become the
     transition, so the core's interior and outer P levels sit on the next two.
     """
+    layout = layout or DEFAULT_LAYOUT
     if kind == "B":
-        return list(reversed(helix.end_basepairs(end, n_bp=B_END_TRIM)))
-    n = N_TRANSITION + len(core_BP.P_END_LEVELS)
+        return list(reversed(helix.end_basepairs(end, n_bp=layout.b_end_trim)))
+    n = layout.n_transition + len(layout.module.P_END_LEVELS)
     outer_first = list(reversed(helix.end_basepairs(end, n_bp=n)))  # terminal level first
-    return outer_first[N_TRANSITION:]
+    return outer_first[layout.n_transition:]
 
 
-def helix_replaced_pairs(helix: Structure, end: str, kind: str) -> List[Tuple[ResidKey, ResidKey]]:
+def helix_replaced_pairs(helix: Structure, end: str, kind: str,
+                         layout: Optional[CoreLayout] = None) -> List[Tuple[ResidKey, ResidKey]]:
     """Helix pairs the core replaces, terminal first, matched to core_replacing_pairs."""
-    n = B_END_TRIM if kind == "B" else P_END_TRIM
+    layout = layout or DEFAULT_LAYOUT
+    n = layout.b_end_trim if kind == "B" else layout.p_end_trim
     return list(reversed(helix.end_basepairs(end, n_bp=n)))
 
 
 def core_replacing_pairs(core: Structure, kind: str) -> List[Tuple[ResidKey, ResidKey]]:
     """Core pairs that take the place of helix_replaced_pairs (same order)."""
+    mod = _layout_of(core).module
     if kind == "B":
-        return [_pair_keys(core, pair) for pair in core_BP.B_END_BASEPAIRS]
-    return [_pair_keys(core, pair) for pair in core_BP.TRANSITION_LEVELS]
+        return [_pair_keys(core, pair) for pair in mod.B_END_BASEPAIRS]
+    return [_pair_keys(core, pair) for pair in mod.TRANSITION_LEVELS]
 
 
-def helix_anchor_pair(helix: Structure, end: str, kind: str) -> Tuple[ResidKey, ResidKey]:
+def helix_anchor_pair(helix: Structure, end: str, kind: str,
+                      layout: Optional[CoreLayout] = None) -> Tuple[ResidKey, ResidKey]:
     """First helix pair kept next to the core (bonded to core_link_pair)."""
-    n = (B_END_TRIM if kind == "B" else P_END_TRIM) + 1
+    layout = layout or DEFAULT_LAYOUT
+    n = (layout.b_end_trim if kind == "B" else layout.p_end_trim) + 1
     return helix.end_basepairs(end, n_bp=n)[0]
 
 
 def core_link_pair(core: Structure, kind: str) -> Tuple[ResidKey, ResidKey]:
     """Core pair bonded to the helix anchor pair at that end."""
+    mod = _layout_of(core).module
     if kind == "B":
-        return _pair_keys(core, core_BP.B_END_BASEPAIRS[-1])
-    return _pair_keys(core, core_BP.TRANSITION_LEVELS[-1])
+        return _pair_keys(core, mod.B_END_BASEPAIRS[-1])
+    return _pair_keys(core, mod.TRANSITION_LEVELS[-1])
 
 
 def core_through_vector(core: Structure, kind_from: str, kind_to: str) -> np.ndarray:
@@ -404,7 +480,7 @@ def end_outward_vector(struct: Structure, end: str) -> np.ndarray:
 
 def align_core_to_helix(*, helix: Structure, end: str, kind: str, core: Structure,
                         verbose_prefix: str) -> Tuple[float, bool]:
-    helix_pairs = helix_fit_pairs(helix, end, kind)
+    helix_pairs = helix_fit_pairs(helix, end, kind, layout=_layout_of(core))
     core_pairs = core_fit_pairs(core, kind)
     best = None
     P = _coords_for_pairs(core, core_pairs, swap=False)
@@ -442,7 +518,7 @@ def align_helix_to_core(*, helix: Structure, kind: str, core: Structure, junctio
     good = []
     every = []
     for end in ("start", "end"):
-        helix_pairs = helix_fit_pairs(helix, end, kind)
+        helix_pairs = helix_fit_pairs(helix, end, kind, layout=_layout_of(core))
         connect = helix.basepairs[0] if end == "start" else helix.basepairs[-1]
         far = helix.basepairs[-1] if end == "start" else helix.basepairs[0]
         p_connect0 = _bp_centroid(helix, connect)
@@ -506,7 +582,7 @@ def regraft_residue(struct: Structure, key: ResidKey, new_base: str) -> str:
 
 def graft_core_bases(*, helix: Structure, end: str, kind: str, core: Structure, swap: bool,
                      verbose_prefix: str) -> None:
-    helix_pairs = helix_replaced_pairs(helix, end, kind)
+    helix_pairs = helix_replaced_pairs(helix, end, kind, layout=_layout_of(core))
     core_pairs = core_replacing_pairs(core, kind)
     done = []
     for (h1, h2), (c_e, c_f) in zip(helix_pairs, core_pairs):
@@ -547,7 +623,7 @@ def build_backbone_graph(structs: Sequence[Structure], junctions: Sequence[BPJun
                 add(k1, k2)
     for jx in junctions:
         for helix, end, kind, swap in jx.sides:
-            h1, h2 = helix_anchor_pair(helix, end, kind)
+            h1, h2 = helix_anchor_pair(helix, end, kind, layout=_layout_of(jx.core))
             c_e, c_f = core_link_pair(jx.core, kind)
             if swap:
                 add(h1, c_f)
@@ -561,7 +637,7 @@ def build_backbone_graph(structs: Sequence[Structure], junctions: Sequence[BPJun
 def junction_bond_report(jx: BPJunction, res_by_key: Dict[ResidKey, Residue]) -> List[str]:
     lines = []
     for helix, end, kind, swap in jx.sides:
-        h1, h2 = helix_anchor_pair(helix, end, kind)
+        h1, h2 = helix_anchor_pair(helix, end, kind, layout=_layout_of(jx.core))
         c_e, c_f = core_link_pair(jx.core, kind)
         pairs = ((h1, c_f), (h2, c_e)) if swap else ((h1, c_e), (h2, c_f))
         for a, b in pairs:
@@ -647,6 +723,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help=("B-DNA axis source: auto = DSSR, falling back to the screw axis; dssr; screw = the "
                          "base-pair-to-base-pair screw; pca = C1' PCA (biased for short helices). "
                          "P-DNA always uses its screw axis."))
+    p.add_argument("--transition", choices=list(TRANSITIONS), default=DEFAULT_TRANSITION,
+                   help=("Transition nucleotides per strand at each junction (default %(default)s): 2 = the "
+                         "compact core; 3 = the longer transition in which every backbone step on both "
+                         "strands turns forward, between the B-DNA and P-DNA twists. A P-DNA then gives up "
+                         "3 levels per junction and needs at least 5 levels (9 with junctions at both ends)."))
     return p
 
 
@@ -662,6 +743,10 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
     axis_source = (getattr(args, "axis_source", "auto") or "auto").strip().lower()
     if axis_source not in AXIS_SOURCES:
         raise SystemExit(f"ERROR: unknown axis source {axis_source!r}")
+    try:
+        layout = core_layout(getattr(args, "transition", DEFAULT_TRANSITION) or DEFAULT_TRANSITION)
+    except (ValueError, ImportError) as exc:
+        raise SystemExit(f"ERROR: {exc}") from exc
     paths = [Path(p) for p in args.dna_files]
     for p in paths:
         if not p.exists():
@@ -691,18 +776,19 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
             )
     for i, (t, h) in enumerate(zip(types, helices)):
         ends = (1 if i > 0 else 0) + (1 if i < len(helices) - 1 else 0)
-        need = (MIN_B_BP if t == "B" else MIN_P_LEVELS)[ends]
+        need = (layout.min_b_bp if t == "B" else layout.min_p_levels)[ends]
         if len(h.basepairs) < need:
             unit = "bp" if t == "B" else "levels"
             raise SystemExit(
                 f"ERROR: {h.name} has {len(h.basepairs)} {unit}; at least {need} are needed for "
-                f"{ends} junction end(s)"
+                f"{ends} junction end(s) with the {layout.key}-nt transition"
             )
     print(f"Junctions to build: {len(paths) - 1}")
     print(f"Axis correction mode: {axis_mode}; B-DNA axis source: {axis_source}; P-DNA axis: screw fit")
     print(
-        f"Each junction: the B-DNA end gives its {B_END_TRIM} terminal bp to the core (bases kept); "
-        f"the P-DNA end's {P_END_TRIM} terminal levels become the transition (bases kept)."
+        f"Transition: {layout.key} nucleotides per strand ({layout.module.__name__.rsplit('.', 1)[-1]}.py). "
+        f"Each junction: the B-DNA end gives its {layout.b_end_trim} terminal bp to the core (bases kept); "
+        f"the P-DNA end's {layout.p_end_trim} terminal levels become the transition (bases kept)."
     )
 
     helices[0].backward_end = "start"
@@ -717,7 +803,7 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
             good = []
             every = []
             for try_end in (fixed_end, "start" if fixed_end == "end" else "end"):
-                core_try = new_core(seg_id=f"core{j + 1}")
+                core_try = new_core(seg_id=f"core{j + 1}", layout=layout)
                 rmsd_try, swap_try = align_core_to_helix(
                     helix=fixed, end=try_end, kind=t_fixed, core=core_try, verbose_prefix=prefix + " [try]"
                 )
@@ -733,7 +819,7 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
             fixed.backward_end = "start" if fixed_end == "end" else "end"
             print(f"{prefix} selected fixed_end={fixed_end} for the first junction")
         else:
-            core = new_core(seg_id=f"core{j + 1}")
+            core = new_core(seg_id=f"core{j + 1}", layout=layout)
             _rmsd, swap_fixed = align_core_to_helix(
                 helix=fixed, end=fixed_end, kind=t_fixed, core=core, verbose_prefix=prefix
             )
@@ -758,7 +844,7 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
         graft_core_bases(helix=moving, end=chosen_end, kind=t_next, core=core, swap=swap_next, verbose_prefix=prefix)
 
         for helix, end, kind in ((fixed, fixed_end, t_fixed), (moving, chosen_end, t_next)):
-            pairs = helix_replaced_pairs(helix, end, kind)
+            pairs = helix_replaced_pairs(helix, end, kind, layout=layout)
             for bp in pairs:
                 helix.trim.update(bp)
             unit = "bp" if kind == "B" else "levels"
@@ -781,7 +867,7 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
     first_chain_keys = {k for k, r in first.residues.items() if r.chainID == first.chains[0]}
     write_ligated_pdb(structs=all_structs, junctions=junctions, out_path=out_path, first_chain_keys=first_chain_keys)
     return {"pdb_out": out_path, "pdb_raw": raw_path, "types": types, "axis_mode": axis_mode,
-            "axis_source": axis_source}
+            "axis_source": axis_source, "transition": layout.key}
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

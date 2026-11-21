@@ -83,9 +83,9 @@ def read_chains(path: Path):
     return {c: [chains[c][k] for k in sorted(chains[c])] for c in chains}
 
 
-def run_quiet(files, out: Path, types: str = ""):
+def run_quiet(files, out: Path, types: str = "", transition: str = "2"):
     args = argparse.Namespace(dna_files=[str(f) for f in files], out=str(out), types=types,
-                              axis_mode="codirectional", axis_source="screw")
+                              axis_mode="codirectional", axis_source="screw", transition=transition)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         result = run_pipeline(args)
@@ -215,6 +215,57 @@ class BPBuilderTest(unittest.TestCase):
         out = self.dir / "pbp.pdb"
         run_quiet([self.p_pdb, b5, p2], out)
         self.assert_ligated(out, [self.p_seq1 + "GATCC" + "TTGCA", "GGCAT" + "GGATC" + self.p_seq2])
+
+    def test_three_nt_transition_b_p_b(self) -> None:
+        p9 = write_model(build_pdna_model("ACGTTGACG", "CGTCAACGT"), self.dir / "P9.pdb")
+        b2 = write_model(b_dna_from_core("CCGATAGC"), self.dir / "B8b.pdb")
+        out = self.dir / "bpb3.pdb"
+        result, log = run_quiet([self.b_pdb, p9, b2], out, transition="3")
+        self.assertEqual(result["transition"], "3")
+        self.assertIn("Transition: 3 nucleotides per strand (core_BP3.py)", log)
+        rev = lambda s: "".join(DNA_COMPLEMENT[b] for b in reversed(s))  # noqa: E731
+        self.assert_ligated(out, [self.b_seq + "ACGTTGACG" + "CCGATAGC", rev("CCGATAGC") + "CGTCAACGT" + rev(self.b_seq)])
+
+    def test_three_nt_transition_minimum_lengths(self) -> None:
+        # One junction end: 5 levels needed (3 transition + 2 fitted); two ends: 9.
+        p4 = write_model(build_pdna_model("ACGT", "TGCA"), self.dir / "P4.pdb")
+        with self.assertRaises(SystemExit):
+            run_quiet([self.b_pdb, p4], self.dir / "short3.pdb", transition="3")
+        p5 = write_model(build_pdna_model("ACGTT", "AACGT"), self.dir / "P5.pdb")
+        out = self.dir / "bp5.pdb"
+        run_quiet([self.b_pdb, p5], out, transition="3")
+        rev_b = "".join(DNA_COMPLEMENT[b] for b in reversed(self.b_seq))
+        self.assert_ligated(out, [self.b_seq + "ACGTT", "AACGT" + rev_b])
+        b2 = write_model(b_dna_from_core("CCGATAGC"), self.dir / "B8b.pdb")
+        p8 = write_model(build_pdna_model("ACGTTGAC", "GTCAACGT"), self.dir / "P8b.pdb")
+        with self.assertRaises(SystemExit):
+            run_quiet([self.b_pdb, p8, b2], self.dir / "bpb8.pdb", transition="3")
+
+    def test_three_nt_core_layout(self) -> None:
+        from bnp_na_lib import core_BP3
+        from bnp_na_lib.make_BP import core_layout
+
+        layout = core_layout("3")
+        self.assertEqual((layout.n_transition, layout.p_end_trim, layout.b_end_trim), (3, 3, 2))
+        self.assertEqual(layout.min_p_levels, {1: 5, 2: 9})
+        self.assertEqual(core_BP3.TRANSITION_LEVELS, [(("E", 3), ("F", 5)), (("E", 4), ("F", 4)), (("E", 5), ("F", 3))])
+        self.assertEqual(core_BP3.P_END_LEVELS, [(("E", 6), ("F", 2)), (("E", 7), ("F", 1))])
+        core = new_core("c", layout=layout)
+        self.assertEqual(len(core.basepairs), 7)
+        self.assertEqual(sorted({k[1] for k in core.residues}), ["E", "F"])
+        self.assertEqual(len(core.residues), 14)
+        with self.assertRaises(ValueError):
+            core_layout("4")
+
+    def test_wrapper_passes_the_transition(self) -> None:
+        p9 = write_model(build_pdna_model("ACGTTGACG", "CGTCAACGT"), self.dir / "P9.pdb")
+        result = build_bp_structure([self.b_pdb, p9], self.dir / "w3.pdb", transition="3")
+        self.assertEqual(result["transition"], "3")
+        self.assertIn("--transition 3", str(result["log_text"]))
+        result = build_bp_structure([self.b_pdb, p9], self.dir / "w2.pdb")
+        self.assertEqual(result["transition"], "2")
+        with self.assertRaises(PipelineError):
+            build_bp_structure([self.b_pdb, p9], self.dir / "w4.pdb", transition="4")
 
     def test_wrapper_reports_errors_as_pipeline_errors(self) -> None:
         with self.assertRaises(PipelineError):
