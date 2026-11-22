@@ -45,11 +45,12 @@ Lengths: the transition nucleotides count as P-DNA, so with T transition
 nucleotides a P-DNA of N levels keeps N - T P-form levels with one junction
 and N - 2T between two junctions; for k P-form levels, enter k + T (or
 k + 2T). Hence a P-DNA needs at least T + 2 levels for one junction (4 for
-T = 2, 5 for T = 3) and 7 levels between two junctions with either core: the
-2-nt core must keep three P-form levels between its transitions, which reach
-toward the axis, the 3-nt core only one (CoreLayout.min_p_levels). A B-DNA
-keeps every base pair and needs at least 3 bp, or 5 with junctions at both
-ends.
+T = 2, 5 for T = 3). Between two junctions the 2-nt core must keep three
+P-form levels between its transitions, which reach toward the axis, so the
+P-DNA needs 7 levels; the 3-nt transitions were refined against each other
+and may meet directly, so 6 levels, all of them transition, are enough
+(CoreLayout.min_p_levels). A B-DNA keeps every base pair and needs at least
+3 bp, or 5 with junctions at both ends.
 
 Helix types are detected from the geometry (P-DNA has its phosphates within
 about 5 A of the helix axis; B-DNA near 9.5 A) unless --types is given, and
@@ -138,7 +139,8 @@ class CoreLayout:
     junctions at both ends it must keep the core module's
     MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS P-form levels between the two
     transitions (3 for the 2-nt core, whose strand I reaches toward the axis;
-    1 for the 3-nt core).
+    0 for the 3-nt core, whose transition was refined against its own image
+    in the other junction).
     """
 
     key: str
@@ -585,9 +587,11 @@ def regraft_residue(struct: Structure, key: ResidKey, new_base: str) -> str:
 
 
 def graft_core_bases(*, helix: Structure, end: str, kind: str, core: Structure, swap: bool,
-                     verbose_prefix: str) -> None:
+                     verbose_prefix: str) -> Dict[ResidKey, ResidKey]:
+    """Give the core's replacing residues the helix's bases; returns {helix residue: core residue}."""
     helix_pairs = helix_replaced_pairs(helix, end, kind, layout=_layout_of(core))
     core_pairs = core_replacing_pairs(core, kind)
+    replaced: Dict[ResidKey, ResidKey] = {}
     done = []
     for (h1, h2), (c_e, c_f) in zip(helix_pairs, core_pairs):
         targets = ((h1, c_f), (h2, c_e)) if swap else ((h1, c_e), (h2, c_f))
@@ -595,8 +599,10 @@ def graft_core_bases(*, helix: Structure, end: str, kind: str, core: Structure, 
             new_base = base_code(helix.residues[h_key].resName)
             old_base = base_code(core.residues[c_key].resName)
             regraft_residue(core, c_key, new_base)
+            replaced[h_key] = c_key
             done.append(f"{c_key[1]}{c_key[2]}:{old_base}->{new_base}")
     print(f"{verbose_prefix} core bases from helix[{helix.name}] {end}-end ({kind}): {', '.join(done)}")
+    return replaced
 
 
 # ----------------------------------------------------------------------------
@@ -608,46 +614,55 @@ class BPJunction:
     jid: int
     core: Structure
     sides: List[Tuple[Structure, str, str, bool]] = field(default_factory=list)  # (helix, end, kind, swap)
+    replaced: Dict[ResidKey, ResidKey] = field(default_factory=dict)  # helix residue -> core residue
 
 
-def build_backbone_graph(structs: Sequence[Structure], junctions: Sequence[BPJunction]) -> Dict[ResidKey, set]:
+def build_backbone_graph(structs: Sequence[Structure], junctions: Sequence[BPJunction]
+                         ) -> Tuple[Dict[ResidKey, set], List[Tuple[ResidKey, ResidKey]]]:
+    """Backbone bonds of the construct, and the bonds that join two pieces.
+
+    Every chain bond of every piece is kept, with each residue a core replaced
+    mapped to its core residue. That gives the helix-core bonds at each
+    junction, and core-core bonds where a P-DNA keeps no level between two
+    junctions (both cores' P-side nucleotides end on the same ideal P-DNA
+    linkage, so they bond directly). Cores' own P levels are dropped.
+    """
+    replaced: Dict[ResidKey, ResidKey] = {}
+    for jx in junctions:
+        replaced.update(jx.replaced)
+    present = {k for st in structs for k in st.residues if k not in st.trim and k not in st.pre_trim}
     adj: Dict[ResidKey, set] = {}
+    joins: List[Tuple[ResidKey, ResidKey]] = []
 
     def add(a: ResidKey, b: ResidKey) -> None:
+        if b in adj.get(a, ()):
+            return
         adj.setdefault(a, set()).add(b)
         adj.setdefault(b, set()).add(a)
+        if a[0] != b[0]:
+            joins.append((a, b))
 
     for st in structs:
         for chain in st.chains:
             keys = sorted(
-                (k for k, r in st.residues.items() if r.chainID == chain and k not in st.trim and k not in st.pre_trim),
+                (k for k, r in st.residues.items() if r.chainID == chain and k not in st.pre_trim),
                 key=lambda k: st.residues[k].resSeq,
             )
             for k1, k2 in zip(keys, keys[1:]):
-                add(k1, k2)
-    for jx in junctions:
-        for helix, end, kind, swap in jx.sides:
-            h1, h2 = helix_anchor_pair(helix, end, kind, layout=_layout_of(jx.core))
-            c_e, c_f = core_link_pair(jx.core, kind)
-            if swap:
-                add(h1, c_f)
-                add(h2, c_e)
-            else:
-                add(h1, c_e)
-                add(h2, c_f)
-    return adj
+                m1, m2 = replaced.get(k1, k1), replaced.get(k2, k2)
+                if m1 != m2 and m1 in present and m2 in present:
+                    add(m1, m2)
+    return adj, joins
 
 
-def junction_bond_report(jx: BPJunction, res_by_key: Dict[ResidKey, Residue]) -> List[str]:
+def junction_bond_report(joins: Sequence[Tuple[ResidKey, ResidKey]], res_by_key: Dict[ResidKey, Residue],
+                         structs: Sequence[Structure]) -> List[str]:
+    names = {st.seg_id: st.name for st in structs}
     lines = []
-    for helix, end, kind, swap in jx.sides:
-        h1, h2 = helix_anchor_pair(helix, end, kind, layout=_layout_of(jx.core))
-        c_e, c_f = core_link_pair(jx.core, kind)
-        pairs = ((h1, c_f), (h2, c_e)) if swap else ((h1, c_e), (h2, c_f))
-        for a, b in pairs:
-            d = _distance_min_O3P(res_by_key[a], res_by_key[b])
-            d_text = f"{d:.3f} A" if d is not None else "NA"
-            lines.append(f"   {kind}-side [{helix.name}] {a[1]}{a[2]} <-> core {b[1]}{b[2]}: O3'-P {d_text}")
+    for a, b in joins:
+        d = _distance_min_O3P(res_by_key[a], res_by_key[b])
+        d_text = f"{d:.3f} A" if d is not None else "NA"
+        lines.append(f"   [{names[a[0]]}] {a[1]}{a[2]} <-> [{names[b[0]]}] {b[1]}{b[2]}: O3'-P {d_text}")
     return lines
 
 
@@ -665,11 +680,10 @@ def write_ligated_pdb(*, structs: Sequence[Structure], junctions: Sequence[BPJun
                 res_by_key[k] = r
     nodes = sorted(res_by_key, key=lambda k: (k[0], k[1], k[2]))
     print(f"Total residues after trimming (all segments + cores): {len(nodes)}")
-    for jx in junctions:
-        print(f"[J{jx.jid}] junction bonds:")
-        for line in junction_bond_report(jx, res_by_key):
-            print(line)
-    adj = build_backbone_graph(structs, junctions)
+    adj, joins = build_backbone_graph(structs, junctions)
+    print("Junction bonds:")
+    for line in junction_bond_report(joins, res_by_key, structs):
+        print(line)
     comps = connected_components_keys(adj, nodes)
     comps.sort(key=len, reverse=True)
     print(f"Ligation graph: components={len(comps)} sizes={[len(c) for c in comps]}")
@@ -731,7 +745,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help=("Transition nucleotides per strand at each junction (default %(default)s): 2 = the "
                          "compact core; 3 = the longer transition in which every backbone step on both "
                          "strands turns forward, between the B-DNA and P-DNA twists. A P-DNA then gives up "
-                         "3 levels per junction and needs at least 5 levels (7 with junctions at both ends)."))
+                         "3 levels per junction and needs at least 5 levels (6 with junctions at both ends, "
+                         "where the two transitions meet directly)."))
     return p
 
 
@@ -844,8 +859,10 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
                 junction_dir=junction_dir, verbose_prefix=prefix, mode=axis_mode, axis_source=axis_source,
             )
 
-        graft_core_bases(helix=fixed, end=fixed_end, kind=t_fixed, core=core, swap=swap_fixed, verbose_prefix=prefix)
-        graft_core_bases(helix=moving, end=chosen_end, kind=t_next, core=core, swap=swap_next, verbose_prefix=prefix)
+        replaced = graft_core_bases(helix=fixed, end=fixed_end, kind=t_fixed, core=core, swap=swap_fixed,
+                                    verbose_prefix=prefix)
+        replaced.update(graft_core_bases(helix=moving, end=chosen_end, kind=t_next, core=core, swap=swap_next,
+                                         verbose_prefix=prefix))
 
         for helix, end, kind in ((fixed, fixed_end, t_fixed), (moving, chosen_end, t_next)):
             pairs = helix_replaced_pairs(helix, end, kind, layout=layout)
@@ -857,7 +874,8 @@ def run_pipeline(args: argparse.Namespace) -> Dict[str, object]:
             core.trim.update(bp)
 
         junctions.append(BPJunction(
-            jid=j + 1, core=core, sides=[(fixed, fixed_end, t_fixed, swap_fixed), (moving, chosen_end, t_next, swap_next)]
+            jid=j + 1, core=core, sides=[(fixed, fixed_end, t_fixed, swap_fixed), (moving, chosen_end, t_next, swap_next)],
+            replaced=replaced,
         ))
         all_structs.append(core)
         all_structs.append(moving)

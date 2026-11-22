@@ -30,7 +30,7 @@ Top-level app folder contains only:
 - `core_BZ.py` — bundled B-Z junction core structure data used by `make_BZV2_3.py`.
 - `make_BP.py` — B-P structure builder: combines alternating B-DNA/P-DNA PDB inputs (either order, types detected from the screw axis or given) through a B-P junction core chosen with `--transition` (2 or 3 nucleotides per strand), keeping every input base; rigid fits only, so a build is immediate; direct CLI.
 - `core_BP.py` — bundled, modeled B-P junction core with a 2-nt transition: two B base pairs, two transition levels and two P levels, clash-free for every base choice.
-- `core_BP3.py` — bundled, modeled B-P junction core with a 3-nt transition in which every backbone step on both strands turns forward between the B and P twists; all sugars C2'-endo, all bases anti, clash-free for every base choice.
+- `core_BP3.py` — bundled, modeled B-P junction core with a 3-nt transition in which every backbone step on both strands turns forward between the B and P twists; all sugars C2'-endo, all bases anti, clash-free for every base choice, and refined against its own image in the other junction so two junctions may meet with no P-form level between them.
 - `convert_to_triplex_pdbV2_1.py` — standalone duplex-to-triplex converter incorporated into V13.7; supports antiparallel G·G-C and parallel T·A-T triplex motifs.
 - `geometry_utils.py` — shared rotation/vector helpers.
 - `na_placer.py` — final orient/place transformation after +Z alignment.
@@ -50,6 +50,7 @@ Top-level app folder contains only:
 3. New helper module: `core_BP3.py`.
 4. `make_BP.py`: helix types are detected from each helix's screw axis, so a 3-bp B-DNA is no longer read as P-DNA.
 5. The B-P builder's explanation is a help window behind a `?` button (`open_bp_builder_help`); the README and the CLI help explain how transition nucleotides are counted and how to choose P-DNA lengths.
+6. `make_BP.py`: the P-form levels a P-DNA must keep between two junctions come from each core module (`MIN_KEPT_P_LEVELS_BETWEEN_JUNCTIONS`: 3 for the 2-nt core, 0 for the 3-nt core), and the ligation maps every helix bond through the residues the cores replace, so two cores bond to each other where no level is kept.
 
 ## V13.22 changes
 

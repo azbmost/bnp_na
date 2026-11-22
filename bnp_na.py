@@ -1054,8 +1054,9 @@ The GUI default is oyz because it changes chirality while keeping the +Z axis di
                 "The transition nucleotides count as P-DNA: a P-DNA of N levels keeps N − T P-form levels "
                 "with one junction and N − 2T between two junctions. For k P-form levels enter k + T levels "
                 "(or k + 2T).",
-                "Minimum P-DNA: T + 2 levels for one junction (4 with Transition 2, 5 with Transition 3) and "
-                "7 levels between two junctions with either transition.",
+                "Minimum P-DNA: T + 2 levels for one junction (4 with Transition 2, 5 with Transition 3). "
+                "Between two junctions: 7 levels with Transition 2, whose transitions need three P-form "
+                "levels between them, and 6 with Transition 3, whose transitions may meet directly.",
                 "Minimum B-DNA: 3 bp for one junction, 5 bp with junctions at both ends. No B-DNA base pair is "
                 "lost.",
                 "Twist of a B-P-B construct from its first to its last base pair: about 34.3° × "
